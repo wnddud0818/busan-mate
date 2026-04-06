@@ -72,6 +72,17 @@ export default function GuideChatPage() {
         content: `${answer.answer}\n\n${answer.citations.join(" · ")}`,
         createdAt: new Date().toISOString(),
       });
+    } catch {
+      addChatMessage({
+        id: createId(),
+        itineraryId: itinerary.id,
+        sessionId: activeSession.id,
+        role: "assistant",
+        content: locale === "ko"
+          ? "잠시 오류가 발생했어요. 다시 시도해주세요."
+          : "Something went wrong. Please try again.",
+        createdAt: new Date().toISOString(),
+      });
     } finally {
       setLoading(false);
     }

@@ -38,6 +38,8 @@ Deno.serve(async (request) => {
       .filter((_, stopIndex) => stopIndex % preferences.tripDays === index)
       .slice(0, 4);
 
+    const dayDate = `2026-04-${String(10 + index).padStart(2, "0")}`;
+
     return {
       dayNumber: index + 1,
       theme: {
@@ -47,9 +49,9 @@ Deno.serve(async (request) => {
       stops: dayStops.map((place, order) => ({
         id: `${place.id}-${order}`,
         order: order + 1,
-        date: "2026-04-10",
-        startTime: `2026-04-1${index}T0${9 + order}:00:00+09:00`,
-        endTime: `2026-04-1${index}T1${1 + order}:00:00+09:00`,
+        date: dayDate,
+        startTime: `${dayDate}T${String(9 + order * 2).padStart(2, "0")}:00:00+09:00`,
+        endTime: `${dayDate}T${String(10 + order * 2).padStart(2, "0")}:00:00+09:00`,
         highlight: {
           ko: `${place.district} 대표 포인트`,
           en: `Top stop in ${place.district}`,

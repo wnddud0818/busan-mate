@@ -39,7 +39,7 @@ export const createLocationEvent = ({
   coordinates: Coordinates;
   consented: boolean;
 }): LocationEvent => ({
-  id: `${session.id}-${Date.now()}`,
+  id: `${session.id}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
   tripSessionId: session.id,
   capturedAt: new Date().toISOString(),
   geohash: consented ? ngeohash.encode(coordinates.latitude, coordinates.longitude, 6) : null,

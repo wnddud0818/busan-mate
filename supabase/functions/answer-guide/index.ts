@@ -25,9 +25,11 @@ Deno.serve(async (request) => {
   }
 
   const answer =
-    String(question).toLowerCase().includes("why") || String(question).includes("왜")
-      ? stop.place.signatureStory?.[locale] ?? stop.place.description?.[locale]
-      : stop.place.description?.[locale];
+    (String(question).toLowerCase().includes("why") || String(question).includes("왜")
+      ? stop.place.signatureStory?.[locale]
+      : undefined) ??
+    stop.place.description?.[locale] ??
+    (locale === "ko" ? "관련 정보를 찾지 못했어요." : "No information available for this place.");
 
   return json({
     answer,

@@ -13,7 +13,6 @@ export const useBootstrap = () => {
   const locale = useAppStore((state) => state.locale);
   const sharedItineraries = useAppStore((state) => state.sharedItineraries);
   const rankings = useAppStore((state) => state.rankings);
-  const { setUserProfile } = useAppStore((state) => state.actions);
   const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
@@ -30,7 +29,7 @@ export const useBootstrap = () => {
     bootstrapAuth()
       .then((profile) => {
         if (!cancelled) {
-          setUserProfile(profile);
+          useAppStore.getState().actions.setUserProfile(profile);
         }
       })
       .finally(() => {
@@ -43,7 +42,7 @@ export const useBootstrap = () => {
     return () => {
       cancelled = true;
     };
-  }, [hydrated, setUserProfile]);
+  }, [hydrated]);
 
   const seededDataReady = useMemo(
     () => sharedItineraries.length > 0 || rankings.length > 0 || seedSharedRoutes.length > 0 || seedRanking.length > 0,
