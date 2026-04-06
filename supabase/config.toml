@@ -1,0 +1,30 @@
+project_id = "busan-mate-local-dev"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[functions.generate-itinerary]
+verify_jwt = false
+
+[functions.get-transit-route]
+verify_jwt = false
+
+[functions.answer-guide]
+verify_jwt = false
+
+[functions.ingest-location-event]
+verify_jwt = false
+
+[functions.publish-itinerary]
+verify_jwt = false
+
+[functions.materialize-ranking]
+verify_jwt = false

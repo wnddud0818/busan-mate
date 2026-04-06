@@ -1,0 +1,72 @@
+{
+  "expo": {
+    "name": "Busan Mate",
+    "slug": "busan-mate",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "busanmate",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A1A24"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.busanmate.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Busan Mate uses your location to guide you between stops and suggest nearby alternatives.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Busan Mate uses your location in the background to send departure reminders during active trips."
+      }
+    },
+    "android": {
+      "package": "com.busanmate.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A1A24"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-localization",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/adaptive-icon.png",
+          "color": "#FF7A45",
+          "sounds": []
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Busan Mate uses your location to keep your trip on track in real time.",
+          "locationAlwaysPermission": "Busan Mate uses your location in the background to alert you before the next departure."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    },
+    "extra": {
+      "eas": {
+        "projectId": "busan-mate-local-dev"
+      }
+    }
+  }
+}
