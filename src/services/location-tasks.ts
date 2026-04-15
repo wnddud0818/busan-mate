@@ -3,9 +3,11 @@ import * as Notifications from "expo-notifications";
 import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
 
+import { readStoredProfile } from "./auth-service";
 import { createLocationEvent, evaluateTrackingUpdate } from "../features/location/guidance";
 import { Itinerary, TripSession } from "../types/domain";
 import { LOCATION_TASK_NAME, readTrackingState, saveTrackingState } from "./location-service";
+import { ingestLocationEvent } from "./session-service";
 
 if (!TaskManager.isTaskDefined(LOCATION_TASK_NAME)) {
   TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
@@ -50,12 +52,20 @@ if (!TaskManager.isTaskDefined(LOCATION_TASK_NAME)) {
       lastAlertAt: result.shouldNotify ? nowIso : session.lastAlertAt,
     };
 
-    await saveTrackingState(itinerary, nextSession);
-    createLocationEvent({
+    const localEvent = createLocationEvent({
       session: nextSession,
       coordinates: latest.coords,
       consented: nextSession.locationConsent,
     });
+    const profile = await readStoredProfile();
+    const ingested = await ingestLocationEvent({
+      itinerary,
+      session: nextSession,
+      event: localEvent,
+      userProfile: profile ?? undefined,
+    });
+
+    await saveTrackingState(itinerary, ingested.session);
   });
 }
 

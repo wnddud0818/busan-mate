@@ -226,6 +226,7 @@ export const seedBookingLinks: BookingLink[] = seedPlaces
 export const seedSharedRoutes: SharedItinerary[] = [
   {
     id: "shared-night-sea",
+    syncStatus: "synced",
     itineraryId: "seed-night-sea",
     title: lt("광안리 나이트 워크", "Gwangalli Night Walk"),
     summary: lt(
@@ -240,6 +241,7 @@ export const seedSharedRoutes: SharedItinerary[] = [
   },
   {
     id: "shared-art-port",
+    syncStatus: "synced",
     itineraryId: "seed-art-port",
     title: lt("영도 감성 포트 데이", "Yeongdo Port Mood Day"),
     summary: lt(

@@ -11,6 +11,7 @@ import {
   LocationEvent,
   RankingSnapshot,
   SharedItinerary,
+  SyncStatus,
   TripSession,
   UserProfile,
 } from "../types/domain";
@@ -40,14 +41,18 @@ interface AppState {
     completeOnboarding: () => void;
     setUserProfile: (profile: UserProfile) => void;
     upsertItinerary: (itinerary: Itinerary) => void;
+    upsertSharedItinerary: (shared: SharedItinerary) => void;
+    setRankings: (rankings: RankingSnapshot[]) => void;
     setNotices: (notices: string[]) => void;
     startSession: (itinerary: Itinerary) => TripSession;
     updateSession: (session: TripSession) => void;
+    advanceSession: () => TripSession | undefined;
+    completeSession: () => TripSession | undefined;
     setLocationConsent: (enabled: boolean) => void;
     addLocationEvent: (event: LocationEvent) => void;
     addChatMessage: (message: ChatMessage) => void;
-    publishItineraryLocally: (itineraryId: string) => SharedItinerary | undefined;
-    applyRating: (itineraryId: string, rating: number) => void;
+    publishItineraryLocally: (itineraryId: string, syncStatus?: SyncStatus) => SharedItinerary | undefined;
+    applyRating: (itineraryId: string, rating: number, syncStatus?: SyncStatus) => void;
     refreshRankings: () => void;
     restoreTrackingState: (payload: TrackingStatePayload | null) => void;
   };
@@ -55,10 +60,21 @@ interface AppState {
 
 const persistStorage = createJSONStorage(() => AsyncStorage);
 
-const syncSharedSnapshot = (
-  itinerary: Itinerary,
-  existingShared?: SharedItinerary
-): SharedItinerary => {
+const upsertFront = <T extends { id: string }>(items: T[], item: T) => [
+  item,
+  ...items.filter((candidate) => candidate.id !== item.id),
+];
+
+const upsertMessage = <T extends { id: string }>(items: T[], item: T) => {
+  const existingIndex = items.findIndex((candidate) => candidate.id === item.id);
+  if (existingIndex === -1) {
+    return [...items, item];
+  }
+
+  return items.map((candidate) => (candidate.id === item.id ? item : candidate));
+};
+
+const syncSharedSnapshot = (itinerary: Itinerary, existingShared?: SharedItinerary): SharedItinerary => {
   const baseSnapshot = buildSharedSnapshot({
     ...itinerary,
     shareStatus: "published",
@@ -68,6 +84,8 @@ const syncSharedSnapshot = (
   return {
     ...baseSnapshot,
     id: existingShared?.id ?? baseSnapshot.id,
+    remoteId: existingShared?.remoteId ?? baseSnapshot.remoteId,
+    syncStatus: itinerary.syncStatus,
     currentTravelers,
     score: computeRankingScore({
       ratingAverage: itinerary.ratingAverage,
@@ -93,6 +111,49 @@ const syncPublishedCollections = ({
   };
 };
 
+const createSessionDraft = (itinerary: Itinerary, locationConsent: boolean): TripSession => ({
+  id: `trip-${itinerary.id.slice(0, 6)}-${createId(5)}`,
+  itineraryId: itinerary.id,
+  currentDay: 1,
+  currentStopOrder: 1,
+  startedAt: new Date().toISOString(),
+  status: "active",
+  locationConsent,
+  locale: itinerary.locale,
+  syncStatus: "pending",
+});
+
+const nextSessionStop = (session: TripSession, itinerary: Itinerary): TripSession => {
+  const currentDay = itinerary.days[session.currentDay - 1];
+
+  if (!currentDay) {
+    return {
+      ...session,
+      status: "completed",
+    };
+  }
+
+  if (session.currentStopOrder < currentDay.stops.length) {
+    return {
+      ...session,
+      currentStopOrder: session.currentStopOrder + 1,
+    };
+  }
+
+  if (session.currentDay < itinerary.days.length) {
+    return {
+      ...session,
+      currentDay: session.currentDay + 1,
+      currentStopOrder: 1,
+    };
+  }
+
+  return {
+    ...session,
+    status: "completed",
+  };
+};
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -113,7 +174,7 @@ export const useAppStore = create<AppState>()(
         setUserProfile: (profile) => set({ userProfile: profile }),
         upsertItinerary: (itinerary) =>
           set((state) => {
-            const itineraries = [itinerary, ...state.itineraries.filter((item) => item.id !== itinerary.id)];
+            const itineraries = upsertFront(state.itineraries, itinerary);
             return {
               itineraries,
               ...syncPublishedCollections({
@@ -123,35 +184,60 @@ export const useAppStore = create<AppState>()(
               }),
             };
           }),
+        upsertSharedItinerary: (shared) =>
+          set((state) => {
+            const sharedItineraries = upsertFront(state.sharedItineraries, shared);
+            return {
+              sharedItineraries,
+              rankings: materializeRanking(sharedItineraries, state.locationEvents),
+            };
+          }),
+        setRankings: (rankings) => set({ rankings }),
         setNotices: (notices) => set({ notices }),
         startSession: (itinerary) => {
-          const session: TripSession = {
-            id: `trip-${itinerary.id.slice(0, 6)}-${createId(5)}`,
-            itineraryId: itinerary.id,
-            currentDay: 1,
-            currentStopOrder: 1,
-            startedAt: new Date().toISOString(),
-            status: "active",
-            locationConsent: get().locationConsent,
-            locale: itinerary.locale,
-          };
-
+          const session = createSessionDraft(itinerary, get().locationConsent);
           set({ activeSession: session });
           return session;
         },
         updateSession: (session) => set({ activeSession: session }),
+        advanceSession: () => {
+          const state = get();
+          const activeSession = state.activeSession;
+          const itinerary = state.itineraries.find((item) => item.id === activeSession?.itineraryId);
+
+          if (!activeSession || !itinerary) {
+            return undefined;
+          }
+
+          const nextSession = nextSessionStop(activeSession, itinerary);
+          set({ activeSession: nextSession });
+          return nextSession;
+        },
+        completeSession: () => {
+          const activeSession = get().activeSession;
+          if (!activeSession) {
+            return undefined;
+          }
+
+          const nextSession: TripSession = {
+            ...activeSession,
+            status: "completed",
+          };
+          set({ activeSession: nextSession });
+          return nextSession;
+        },
         setLocationConsent: (enabled) => set({ locationConsent: enabled }),
         addLocationEvent: (event) =>
           set((state) => {
-            const locationEvents = [event, ...state.locationEvents].slice(0, 200);
+            const locationEvents = upsertFront(state.locationEvents, event).slice(0, 200);
             return {
               locationEvents,
               rankings: materializeRanking(state.sharedItineraries, locationEvents),
             };
           }),
         addChatMessage: (message) =>
-          set((state) => ({ chatMessages: [...state.chatMessages, message] })),
-        publishItineraryLocally: (itineraryId) => {
+          set((state) => ({ chatMessages: upsertMessage(state.chatMessages, message) })),
+        publishItineraryLocally: (itineraryId, syncStatus = "synced") => {
           const itinerary = get().itineraries.find((item) => item.id === itineraryId);
           if (!itinerary) {
             return undefined;
@@ -160,6 +246,7 @@ export const useAppStore = create<AppState>()(
           const nextItinerary: Itinerary = {
             ...itinerary,
             shareStatus: "published",
+            syncStatus,
           };
           const shared = syncSharedSnapshot(
             nextItinerary,
@@ -167,27 +254,30 @@ export const useAppStore = create<AppState>()(
           );
 
           set((state) => {
-            const sharedItineraries = [
-              shared,
-              ...state.sharedItineraries.filter((item) => item.itineraryId !== itineraryId),
-            ];
+            const itineraries = state.itineraries.map((item) => (item.id === itineraryId ? nextItinerary : item));
+            const sharedItineraries = upsertFront(
+              state.sharedItineraries.filter((item) => item.itineraryId !== itineraryId),
+              shared
+            );
 
             return {
-              itineraries: state.itineraries.map((item) =>
-                item.id === itineraryId ? nextItinerary : item
-              ),
+              itineraries,
               sharedItineraries,
               rankings: materializeRanking(sharedItineraries, state.locationEvents),
             };
           });
           return shared;
         },
-        applyRating: (itineraryId, rating) =>
+        applyRating: (itineraryId, rating, syncStatus = "synced") =>
           set((state) => {
             const safeRating = Math.max(1, Math.min(5, rating));
             const itineraries = state.itineraries.map((item) =>
               item.id === itineraryId
-                ? { ...item, ratingAverage: Number(((item.ratingAverage + safeRating) / 2).toFixed(1)) }
+                ? {
+                    ...item,
+                    syncStatus,
+                    ratingAverage: Number(((item.ratingAverage + safeRating) / 2).toFixed(1)),
+                  }
                 : item
             );
 
@@ -210,10 +300,7 @@ export const useAppStore = create<AppState>()(
               return {};
             }
 
-            const itineraries = [
-              payload.itinerary,
-              ...state.itineraries.filter((item) => item.id !== payload.itinerary.id),
-            ];
+            const itineraries = upsertFront(state.itineraries, payload.itinerary);
 
             return {
               itineraries,

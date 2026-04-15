@@ -234,6 +234,7 @@ export const buildFallbackItinerary = (
 
   return {
     id: createId(),
+    syncStatus: "synced",
     routeSlug: `busan-${preferences.startDistrict.toLowerCase().replace(/\s+/g, "-")}-${createId(6)}`,
     title,
     summary,

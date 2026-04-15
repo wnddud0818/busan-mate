@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { Screen } from "../../../src/components/common/screen";
+import { hasSupabaseConfig } from "../../../src/config/env";
 import { answerGuideQuestion } from "../../../src/services/guide-service";
 import { useAppStore } from "../../../src/stores/app-store";
 import { colors, radii, spacing } from "../../../src/theme/tokens";
@@ -9,6 +10,7 @@ import { createId } from "../../../src/utils/id";
 
 export default function GuideChatPage() {
   const locale = useAppStore((state) => state.locale);
+  const profile = useAppStore((state) => state.userProfile);
   const activeSession = useAppStore((state) => state.activeSession);
   const itinerary = useAppStore((state) =>
     state.itineraries.find((item) => item.id === activeSession?.itineraryId)
@@ -16,7 +18,7 @@ export default function GuideChatPage() {
   const messages = useAppStore((state) =>
     state.chatMessages.filter((message) => message.itineraryId === activeSession?.itineraryId)
   );
-  const { addChatMessage } = useAppStore((state) => state.actions);
+  const { addChatMessage, updateSession } = useAppStore((state) => state.actions);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -42,14 +44,19 @@ export default function GuideChatPage() {
       return;
     }
 
+    const userSyncStatus: "pending" | "synced" = hasSupabaseConfig ? "pending" : "synced";
+
     const userMessage = {
       id: createId(),
       itineraryId: itinerary.id,
       sessionId: activeSession.id,
+      threadRemoteId: activeSession.chatThreadRemoteId,
       role: "user" as const,
       content: question,
       createdAt: new Date().toISOString(),
+      syncStatus: userSyncStatus,
     };
+
     addChatMessage(userMessage);
     setInput("");
     setLoading(true);
@@ -62,15 +69,34 @@ export default function GuideChatPage() {
           stop: currentStop,
           locale,
         },
+        session: activeSession,
+        userProfile: profile,
+        userMessageId: userMessage.id,
       });
 
       addChatMessage({
-        id: createId(),
+        ...userMessage,
+        threadRemoteId: answer.threadRemoteId ?? userMessage.threadRemoteId,
+        syncStatus: answer.syncStatus,
+      });
+
+      if (answer.threadRemoteId && activeSession.chatThreadRemoteId !== answer.threadRemoteId) {
+        updateSession({
+          ...activeSession,
+          chatThreadRemoteId: answer.threadRemoteId,
+        });
+      }
+
+      addChatMessage({
+        id: answer.assistantClientId ?? createId(),
+        remoteId: answer.assistantRemoteId,
         itineraryId: itinerary.id,
         sessionId: activeSession.id,
+        threadRemoteId: answer.threadRemoteId,
         role: "assistant",
-        content: `${answer.answer}\n\n${answer.citations.join(" · ")}`,
+        content: `${answer.answer}\n\n${answer.citations.join(" 쨌 ")}`,
         createdAt: new Date().toISOString(),
+        syncStatus: answer.syncStatus,
       });
     } catch {
       addChatMessage({
@@ -78,10 +104,12 @@ export default function GuideChatPage() {
         itineraryId: itinerary.id,
         sessionId: activeSession.id,
         role: "assistant",
-        content: locale === "ko"
-          ? "잠시 오류가 발생했어요. 다시 시도해주세요."
-          : "Something went wrong. Please try again.",
+        content:
+          locale === "ko"
+            ? "?좎떆 ?ㅻ쪟媛 諛쒖깮?덉뼱?? ?ㅼ떆 ?쒕룄?댁＜?몄슂."
+            : "Something went wrong. Please try again.",
         createdAt: new Date().toISOString(),
+        syncStatus: "failed",
       });
     } finally {
       setLoading(false);
@@ -89,11 +117,15 @@ export default function GuideChatPage() {
   };
 
   return (
-    <Screen title={locale === "ko" ? "가이드 Q&A" : "Guide Q&A"} subtitle={currentStop.place.name[locale]} scroll={false}>
+    <Screen
+      title={locale === "ko" ? "媛?대뱶 Q&A" : "Guide Q&A"}
+      subtitle={currentStop.place.name[locale]}
+      scroll={false}
+    >
       <View style={styles.container}>
         <View style={styles.quickRow}>
           {(locale === "ko"
-            ? ["여기가 왜 유명해?", "다음 이동 시간은?", "실내 대체 장소 추천"]
+            ? ["?ш린媛 ???좊챸??", "?ㅼ쓬 ?대룞 ?쒓컙??", "?ㅻ궡 ?泥??μ냼 異붿쿇"]
             : ["Why is this place famous?", "When do I leave next?", "Suggest an indoor backup"]
           ).map((question) => (
             <Pressable key={question} style={styles.quickButton} onPress={() => sendMessage(question)}>
@@ -117,7 +149,7 @@ export default function GuideChatPage() {
           {messages.length === 0 ? (
             <Text style={styles.emptyText}>
               {locale === "ko"
-                ? "현재 장소의 역사나 다음 이동 시간을 물어보세요."
+                ? "?꾩옱 ?μ냼????궗???ㅼ쓬 ?대룞 ?쒓컙??臾쇱뼱蹂댁꽭??"
                 : "Ask about the current stop, local story, or the next transfer."}
             </Text>
           ) : null}
@@ -128,11 +160,11 @@ export default function GuideChatPage() {
             value={input}
             onChangeText={setInput}
             style={styles.input}
-            placeholder={locale === "ko" ? "질문을 입력하세요" : "Type your question"}
+            placeholder={locale === "ko" ? "吏덈Ц???낅젰?섏꽭??" : "Type your question"}
             placeholderTextColor="rgba(248,251,253,0.45)"
           />
           <Pressable style={styles.sendButton} onPress={() => sendMessage()} disabled={loading}>
-            <Text style={styles.sendText}>{loading ? "..." : locale === "ko" ? "전송" : "Send"}</Text>
+            <Text style={styles.sendText}>{loading ? "..." : locale === "ko" ? "?꾩넚" : "Send"}</Text>
           </Pressable>
         </View>
       </View>

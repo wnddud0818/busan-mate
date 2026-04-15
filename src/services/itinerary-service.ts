@@ -176,6 +176,7 @@ export const generateItinerary = async (
         const remoteItinerary = await enrichTransitLegs({
           ...candidate.data,
           source: "ai",
+          syncStatus: "synced",
         });
 
         return {
@@ -195,6 +196,7 @@ export const generateItinerary = async (
     itinerary: {
       ...fallback,
       id: fallback.id || createId(),
+      syncStatus: fallback.syncStatus ?? "synced",
     },
     usedFallback: true,
     warnings: [...warnings, "Fallback planner used because remote AI was unavailable."],

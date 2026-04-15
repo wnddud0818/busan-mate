@@ -8,8 +8,14 @@ import { Screen } from "../../src/components/common/screen";
 import { SectionCard } from "../../src/components/common/section-card";
 import { StopCard } from "../../src/components/itinerary/stop-card";
 import { sendMagicLink } from "../../src/services/auth-service";
-import { openNavigationLink, requestLiveGuidePermissions, saveTrackingState } from "../../src/services/location-service";
+import {
+  openNavigationLink,
+  requestLiveGuidePermissions,
+  saveTrackingState,
+} from "../../src/services/location-service";
 import { publishItinerary } from "../../src/services/publish-service";
+import { rateItinerary } from "../../src/services/rating-service";
+import { syncLiveSession } from "../../src/services/session-service";
 import { useAppStore } from "../../src/stores/app-store";
 import { colors, radii, spacing } from "../../src/theme/tokens";
 
@@ -18,8 +24,14 @@ export default function ItineraryDetailPage() {
   const locale = useAppStore((state) => state.locale);
   const itinerary = useAppStore((state) => state.itineraries.find((item) => item.id === params.id));
   const profile = useAppStore((state) => state.userProfile);
-  const { startSession, updateSession, setUserProfile, publishItineraryLocally, applyRating, setLocationConsent } =
-    useAppStore((state) => state.actions);
+  const {
+    startSession,
+    updateSession,
+    setUserProfile,
+    upsertItinerary,
+    upsertSharedItinerary,
+    setLocationConsent,
+  } = useAppStore((state) => state.actions);
   const { t } = useTranslation();
 
   const publishMutation = useMutation({
@@ -33,18 +45,45 @@ export default function ItineraryDetailPage() {
         userProfile: profile,
       });
     },
-    onSuccess: ({ upgradeRequired }) => {
-      if (!itinerary) {
+    onSuccess: (result) => {
+      if (result.upgradeRequired) {
+        Alert.alert(
+          locale === "ko" ? "濡쒓렇???낃렇?덉씠???꾩슂" : "Upgrade required",
+          locale === "ko" ? "?대찓??留곹겕濡?濡쒓렇?명븯硫?怨듭쑀?????덉뼱??" : "Use a magic link before publishing."
+        );
         return;
       }
 
-      if (!upgradeRequired) {
-        publishItineraryLocally(itinerary.id);
-      } else {
+      upsertItinerary(result.itinerary);
+      upsertSharedItinerary(result.shared);
+
+      if (result.syncStatus === "pending") {
         Alert.alert(
-          locale === "ko" ? "로그인 업그레이드 필요" : "Upgrade required",
-          locale === "ko" ? "이메일 링크로 로그인하면 공유할 수 있어요." : "Use a magic link before publishing."
+          "Busan Mate",
+          locale === "ko"
+            ? "원격 저장에 실패해 로컬 임시 상태로 보관했어요."
+            : "Remote sync failed, so this route is saved locally for now."
         );
+      }
+    },
+  });
+
+  const ratingMutation = useMutation({
+    mutationFn: async () => {
+      if (!itinerary) {
+        throw new Error("Missing itinerary");
+      }
+
+      return rateItinerary({
+        itinerary,
+        rating: 5,
+        userProfile: profile,
+      });
+    },
+    onSuccess: (result) => {
+      upsertItinerary(result.itinerary);
+      if (result.shared) {
+        upsertSharedItinerary(result.shared);
       }
     },
   });
@@ -57,17 +96,32 @@ export default function ItineraryDetailPage() {
     );
   }
 
-  const startLiveGuide = async () => {
-    const session = startSession(itinerary);
-    const permissionGranted = await requestLiveGuidePermissions();
+  const launchSession = async ({
+    askPermission,
+    destination,
+  }: {
+    askPermission: boolean;
+    destination: "guide" | "live";
+  }) => {
+    const draftSession = startSession(itinerary);
+    const permissionGranted = askPermission ? await requestLiveGuidePermissions() : false;
     const nextSession = {
-      ...session,
+      ...draftSession,
       locationConsent: permissionGranted,
     };
+
     setLocationConsent(permissionGranted);
-    updateSession(nextSession);
-    await saveTrackingState(itinerary, nextSession);
-    router.push(`/trip/${nextSession.id}`);
+    const result = await syncLiveSession({
+      itinerary,
+      session: nextSession,
+      userProfile: profile,
+    });
+
+    upsertItinerary(result.itinerary);
+    updateSession(result.session);
+    await saveTrackingState(result.itinerary, result.session);
+
+    router.push(destination === "live" ? `/trip/${result.session.id}` : `/trip/${result.session.id}/guide`);
   };
 
   return (
@@ -75,7 +129,7 @@ export default function ItineraryDetailPage() {
       <SectionCard>
         <Text style={styles.metric}>{itinerary.estimatedBudgetLabel[locale]}</Text>
         <View style={styles.actionRow}>
-          <Pressable style={styles.primaryButton} onPress={startLiveGuide}>
+          <Pressable style={styles.primaryButton} onPress={() => launchSession({ askPermission: true, destination: "live" })}>
             <Text style={styles.primaryButtonText}>{t("itinerary.startGuide")}</Text>
           </Pressable>
           <Pressable style={styles.secondaryButton} onPress={() => publishMutation.mutate()}>
@@ -85,16 +139,10 @@ export default function ItineraryDetailPage() {
           </Pressable>
         </View>
         <View style={styles.actionRow}>
-          <Pressable
-            style={styles.inlineButton}
-            onPress={() => {
-              const session = startSession(itinerary);
-              router.push(`/trip/${session.id}/guide`);
-            }}
-          >
+          <Pressable style={styles.inlineButton} onPress={() => launchSession({ askPermission: false, destination: "guide" })}>
             <Text style={styles.inlineButtonText}>{t("itinerary.askGuide")}</Text>
           </Pressable>
-          <Pressable style={styles.inlineButton} onPress={() => applyRating(itinerary.id, 5)}>
+          <Pressable style={styles.inlineButton} onPress={() => ratingMutation.mutate()}>
             <Text style={styles.inlineButtonText}>{locale === "ko" ? "5점 남기기" : "Rate 5.0"}</Text>
           </Pressable>
         </View>
@@ -104,7 +152,7 @@ export default function ItineraryDetailPage() {
         <GuestUpgradeCard
           locale={locale}
           onSend={async (email) => {
-            const upgraded = await sendMagicLink(email);
+            const upgraded = await sendMagicLink(email, locale);
             setUserProfile(upgraded);
           }}
         />

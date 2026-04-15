@@ -1,12 +1,68 @@
 import * as SecureStore from "expo-secure-store";
 
 import { supabase } from "../lib/supabase";
-import { UserProfile } from "../types/domain";
+import { AppLocale, UserProfile } from "../types/domain";
 import { createId } from "../utils/id";
 
 const LOCAL_PROFILE_KEY = "busan-mate-local-profile";
 
-export const bootstrapAuth = async (): Promise<UserProfile> => {
+const saveLocalProfile = async (profile: UserProfile) => {
+  await SecureStore.setItemAsync(LOCAL_PROFILE_KEY, JSON.stringify(profile));
+};
+
+export const readStoredProfile = async (): Promise<UserProfile | null> => {
+  const stored = await SecureStore.getItemAsync(LOCAL_PROFILE_KEY);
+  return stored ? (JSON.parse(stored) as UserProfile) : null;
+};
+
+export const ensureRemoteProfile = async ({
+  authUserId,
+  email,
+  isAnonymous,
+  locale,
+}: {
+  authUserId: string;
+  email?: string;
+  isAnonymous: boolean;
+  locale: AppLocale;
+}): Promise<UserProfile> => {
+  if (!supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .upsert(
+      {
+        auth_user_id: authUserId,
+        locale,
+        is_anonymous: isAnonymous,
+      },
+      {
+        onConflict: "auth_user_id",
+      }
+    )
+    .select("id, auth_user_id, locale, is_anonymous")
+    .single();
+
+  if (error || !data?.id) {
+    throw error ?? new Error("Unable to ensure the remote profile.");
+  }
+
+  const profile: UserProfile = {
+    id: authUserId,
+    authUserId,
+    profileId: data.id,
+    isAnonymous,
+    email,
+    authMode: "supabase",
+  };
+
+  await saveLocalProfile(profile);
+  return profile;
+};
+
+export const bootstrapAuth = async (locale: AppLocale = "ko"): Promise<UserProfile> => {
   if (supabase) {
     const { data } = await supabase.auth.getSession();
     let session = data.session;
@@ -16,17 +72,19 @@ export const bootstrapAuth = async (): Promise<UserProfile> => {
       session = anonymous.data.session ?? null;
     }
 
-    return {
-      id: session?.user.id ?? createId(),
-      isAnonymous: session?.user.is_anonymous ?? true,
-      email: session?.user.email ?? undefined,
-      authMode: "supabase",
-    };
+    if (session?.user.id) {
+      return ensureRemoteProfile({
+        authUserId: session.user.id,
+        email: session.user.email ?? undefined,
+        isAnonymous: session.user.is_anonymous ?? true,
+        locale,
+      });
+    }
   }
 
-  const stored = await SecureStore.getItemAsync(LOCAL_PROFILE_KEY);
+  const stored = await readStoredProfile();
   if (stored) {
-    return JSON.parse(stored) as UserProfile;
+    return stored;
   }
 
   const profile: UserProfile = {
@@ -34,11 +92,11 @@ export const bootstrapAuth = async (): Promise<UserProfile> => {
     isAnonymous: true,
     authMode: "local",
   };
-  await SecureStore.setItemAsync(LOCAL_PROFILE_KEY, JSON.stringify(profile));
+  await saveLocalProfile(profile);
   return profile;
 };
 
-export const sendMagicLink = async (email: string) => {
+export const sendMagicLink = async (email: string, locale: AppLocale = "ko") => {
   if (supabase) {
     await supabase.auth.signInWithOtp({
       email,
@@ -46,14 +104,23 @@ export const sendMagicLink = async (email: string) => {
         emailRedirectTo: "busanmate://",
       },
     });
+
+    const stored: UserProfile = {
+      id: email,
+      email,
+      isAnonymous: false,
+      authMode: "supabase",
+    };
+    await saveLocalProfile(stored);
+    return stored;
   }
 
   const stored: UserProfile = {
     id: `guest-${createId(10)}`,
     isAnonymous: false,
-    authMode: supabase ? "supabase" : "local",
+    authMode: "local",
     email,
   };
-  await SecureStore.setItemAsync(LOCAL_PROFILE_KEY, JSON.stringify(stored));
+  await saveLocalProfile(stored);
   return stored;
 };

@@ -18,13 +18,16 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.answer-guide]
-verify_jwt = false
+verify_jwt = true
 
 [functions.ingest-location-event]
-verify_jwt = false
+verify_jwt = true
 
 [functions.publish-itinerary]
-verify_jwt = false
+verify_jwt = true
+
+[functions.rate-itinerary]
+verify_jwt = true
 
 [functions.materialize-ranking]
 verify_jwt = false

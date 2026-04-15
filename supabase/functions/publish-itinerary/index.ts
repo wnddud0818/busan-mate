@@ -1,22 +1,44 @@
 import { corsHeaders, json } from "../_shared/cors.ts";
+import { createAdminClient, requireAuthUser, requireOwnedProfile } from "../_shared/db.ts";
+import { upsertItineraryGraph } from "../_shared/itinerary-sync.ts";
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const { itinerary } = await request.json();
-  const heroStop = itinerary?.days?.[0]?.stops?.[0];
+  try {
+    const authUser = await requireAuthUser(request);
+    const admin = createAdminClient();
+    const { itinerary, profileId, shareStatus } = await request.json();
 
-  return json({
-    id: crypto.randomUUID(),
-    itineraryId: itinerary.id,
-    title: itinerary.title,
-    summary: itinerary.summary,
-    heroPlaceName: heroStop?.place?.name ?? itinerary.title,
-    tags: itinerary.preferences?.interests?.slice(0, 3) ?? [],
-    ratingAverage: itinerary.ratingAverage ?? 4.7,
-    currentTravelers: 8,
-    score: 84,
-  });
+    const ownedProfileId = await requireOwnedProfile({
+      admin,
+      profileId,
+      authUserId: authUser.id,
+    });
+
+    const result = await upsertItineraryGraph({
+      admin,
+      itinerary,
+      profileId: ownedProfileId,
+      shareStatus: shareStatus ?? itinerary?.shareStatus ?? "private",
+    });
+
+    return json({
+      itinerary: {
+        ...result.itinerary,
+        syncStatus: "synced",
+      },
+      shared: result.shared,
+      syncStatus: "synced",
+    });
+  } catch (error) {
+    return json(
+      {
+        message: error instanceof Error ? error.message : "Unable to publish the itinerary.",
+      },
+      400
+    );
+  }
 });

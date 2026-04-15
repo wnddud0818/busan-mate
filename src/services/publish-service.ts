@@ -1,7 +1,6 @@
 import { hasSupabaseConfig } from "../config/env";
-import { buildSharedSnapshot } from "../features/ranking/scoring";
-import { supabase } from "../lib/supabase";
 import { Itinerary, PublishResult, UserProfile } from "../types/domain";
+import { syncItineraryRecord, toLocalSharedSnapshot } from "./remote-sync";
 
 export const requiresUpgradeForRemotePublish = ({
   userProfile,
@@ -24,32 +23,30 @@ export const publishItinerary = async ({
       remoteEnabled: hasSupabaseConfig,
     })
   ) {
+    const pendingItinerary: Itinerary = {
+      ...itinerary,
+      shareStatus: "published",
+      syncStatus: "pending",
+    };
+
     return {
-      shared: buildSharedSnapshot(itinerary),
+      itinerary: pendingItinerary,
+      shared: toLocalSharedSnapshot(pendingItinerary, "pending"),
       upgradeRequired: true,
+      syncStatus: "pending",
     };
   }
 
-  if (hasSupabaseConfig && supabase) {
-    const { data, error } = await supabase.functions.invoke("publish-itinerary", {
-      body: {
-        itinerary,
-      },
-    });
-
-    if (!error && data) {
-      return {
-        shared: data,
-        upgradeRequired: false,
-      };
-    }
-  }
+  const result = await syncItineraryRecord({
+    itinerary,
+    userProfile,
+    shareStatus: "published",
+  });
 
   return {
-    shared: buildSharedSnapshot({
-      ...itinerary,
-      shareStatus: "published",
-    }),
+    itinerary: result.itinerary,
+    shared: result.shared ?? toLocalSharedSnapshot(result.itinerary, result.syncStatus),
     upgradeRequired: false,
+    syncStatus: result.syncStatus,
   };
 };

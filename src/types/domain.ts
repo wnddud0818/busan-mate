@@ -18,6 +18,8 @@ export interface LocalizedText {
   en: string;
 }
 
+export type SyncStatus = "synced" | "pending" | "failed";
+
 export interface Coordinates {
   latitude: number;
   longitude: number;
@@ -98,6 +100,8 @@ export interface TripPreferences {
 
 export interface Itinerary {
   id: string;
+  remoteId?: string;
+  syncStatus: SyncStatus;
   routeSlug: string;
   title: LocalizedText;
   summary: LocalizedText;
@@ -113,6 +117,8 @@ export interface Itinerary {
 
 export interface TripSession {
   id: string;
+  remoteId?: string;
+  syncStatus: SyncStatus;
   itineraryId: string;
   currentDay: number;
   currentStopOrder: number;
@@ -121,10 +127,13 @@ export interface TripSession {
   locationConsent: boolean;
   locale: AppLocale;
   lastAlertAt?: string;
+  chatThreadRemoteId?: string;
 }
 
 export interface LocationEvent {
   id: string;
+  remoteId?: string;
+  syncStatus: SyncStatus;
   tripSessionId: string;
   capturedAt: string;
   geohash: string | null;
@@ -133,6 +142,8 @@ export interface LocationEvent {
 
 export interface SharedItinerary {
   id: string;
+  remoteId?: string;
+  syncStatus: SyncStatus;
   itineraryId: string;
   title: LocalizedText;
   summary: LocalizedText;
@@ -156,8 +167,11 @@ export interface RankingSnapshot {
 
 export interface ChatMessage {
   id: string;
+  remoteId?: string;
+  syncStatus: SyncStatus;
   itineraryId: string;
   sessionId?: string;
+  threadRemoteId?: string;
   role: "user" | "assistant";
   content: string;
   createdAt: string;
@@ -168,6 +182,13 @@ export interface GuideAnswer {
   suggestions: string[];
   citations: string[];
   confidence: "high" | "medium" | "fallback";
+}
+
+export interface GuideAnswerResult extends GuideAnswer {
+  threadRemoteId?: string;
+  assistantClientId?: string;
+  assistantRemoteId?: string;
+  syncStatus: SyncStatus;
 }
 
 export interface GuideContext {
@@ -185,6 +206,8 @@ export interface BookingLink {
 
 export interface UserProfile {
   id: string;
+  authUserId?: string;
+  profileId?: string;
   isAnonymous: boolean;
   email?: string;
   authMode: "local" | "supabase";
@@ -197,6 +220,26 @@ export interface GenerateItineraryResponse {
 }
 
 export interface PublishResult {
+  itinerary: Itinerary;
   shared: SharedItinerary;
   upgradeRequired: boolean;
+  syncStatus: SyncStatus;
+}
+
+export interface RateItineraryResult {
+  itinerary: Itinerary;
+  shared?: SharedItinerary;
+  syncStatus: SyncStatus;
+}
+
+export interface StartSessionResult {
+  itinerary: Itinerary;
+  session: TripSession;
+  syncStatus: SyncStatus;
+}
+
+export interface LocationIngestResult {
+  event: LocationEvent;
+  session: TripSession;
+  syncStatus: SyncStatus;
 }

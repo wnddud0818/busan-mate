@@ -84,6 +84,8 @@ const itineraryStopSchema = z.object({
 
 export const itinerarySchema = z.object({
   id: z.string().min(1),
+  remoteId: z.string().min(1).optional(),
+  syncStatus: z.enum(["synced", "pending", "failed"]).default("synced"),
   routeSlug: z.string().min(1),
   title: localizedTextSchema,
   summary: localizedTextSchema,

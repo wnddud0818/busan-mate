@@ -6,6 +6,7 @@ let useAppStore: typeof import("../app-store").useAppStore;
 
 const buildItinerary = (): Itinerary => ({
   id: "itinerary-1",
+  syncStatus: "synced",
   routeSlug: "itinerary-1",
   title: { ko: "테스트 루트", en: "Test route" },
   summary: { ko: "테스트 요약", en: "Test summary" },
@@ -63,6 +64,7 @@ const buildItinerary = (): Itinerary => ({
 
 const buildSession = (): TripSession => ({
   id: "trip-itiner-abcde",
+  syncStatus: "synced",
   itineraryId: "itinerary-1",
   currentDay: 1,
   currentStopOrder: 1,
@@ -74,6 +76,7 @@ const buildSession = (): TripSession => ({
 
 const buildLocationEvent = (): LocationEvent => ({
   id: "event-1",
+  syncStatus: "synced",
   tripSessionId: "trip-itiner-abcde",
   capturedAt: "2026-04-15T09:30:00.000Z",
   geohash: null,
@@ -118,6 +121,21 @@ describe("app store state sync", () => {
     expect(useAppStore.getState().activeSession?.id).toBe(session.id);
     expect(useAppStore.getState().locationConsent).toBe(true);
     expect(useAppStore.getState().itineraries[0]?.id).toBe(itinerary.id);
+  });
+
+  it("marks the active session completed after advancing past the final stop", () => {
+    const itinerary = buildItinerary();
+    const session = buildSession();
+
+    useAppStore.getState().actions.restoreTrackingState({
+      itinerary,
+      session,
+    });
+
+    const advanced = useAppStore.getState().actions.advanceSession();
+
+    expect(advanced?.status).toBe("completed");
+    expect(useAppStore.getState().activeSession?.status).toBe("completed");
   });
 
   it("recomputes rankings when a live location event is added", () => {

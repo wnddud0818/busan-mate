@@ -11,12 +11,7 @@ export const loadRankings = async ({
   locationEvents: LocationEvent[];
 }): Promise<RankingSnapshot[]> => {
   if (hasSupabaseConfig && supabase) {
-    const { data, error } = await supabase.functions.invoke("materialize-ranking", {
-      body: {
-        sharedItineraries,
-        locationEvents,
-      },
-    });
+    const { data, error } = await supabase.functions.invoke("materialize-ranking");
 
     if (!error && Array.isArray(data)) {
       return data;

@@ -8,7 +8,9 @@ import {
 } from "../../types/domain";
 
 const liveTravelerCount = (itineraryId: string, locationEvents: LocationEvent[]) =>
-  locationEvents.filter((event) => event.tripSessionId.includes(itineraryId.slice(0, 6))).length;
+  locationEvents.filter(
+    (event) => event.syncStatus === "synced" && event.tripSessionId.includes(itineraryId.slice(0, 6))
+  ).length;
 
 export const computeRankingScore = ({
   ratingAverage,
@@ -24,11 +26,13 @@ export const materializeRanking = (
   publishedItineraries: SharedItinerary[],
   locationEvents: LocationEvent[]
 ): RankingSnapshot[] => {
-  if (publishedItineraries.length === 0) {
+  const eligibleRoutes = publishedItineraries.filter((route) => route.syncStatus === "synced");
+
+  if (eligibleRoutes.length === 0) {
     return seedRanking;
   }
 
-  return publishedItineraries
+  return eligibleRoutes
     .map((route) => {
       const travelers = route.currentTravelers + liveTravelerCount(route.itineraryId, locationEvents);
       return {
@@ -57,6 +61,7 @@ export const buildSharedSnapshot = (itinerary: Itinerary): SharedRoute => {
 
   return {
     id: `shared-${itinerary.id}`,
+    syncStatus: itinerary.syncStatus,
     itineraryId: itinerary.id,
     title: itinerary.title,
     summary: itinerary.summary,

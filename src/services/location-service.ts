@@ -45,6 +45,10 @@ export const saveTrackingState = async (itinerary: Itinerary, session: TripSessi
   );
 };
 
+export const clearTrackingState = async () => {
+  await AsyncStorage.removeItem(TRACKING_STATE_KEY);
+};
+
 export const readTrackingState = async (): Promise<TrackingState | null> => {
   const stored = await AsyncStorage.getItem(TRACKING_STATE_KEY);
   if (!stored) {

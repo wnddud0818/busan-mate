@@ -28,7 +28,7 @@ export const useBootstrap = () => {
 
     let cancelled = false;
 
-    Promise.all([bootstrapAuth(), readTrackingState()])
+    Promise.all([bootstrapAuth(locale), readTrackingState()])
       .then(([profile, trackingState]) => {
         if (!cancelled) {
           setUserProfile(profile);
@@ -45,7 +45,7 @@ export const useBootstrap = () => {
     return () => {
       cancelled = true;
     };
-  }, [hydrated, restoreTrackingState, setUserProfile]);
+  }, [hydrated, locale, restoreTrackingState, setUserProfile]);
 
   const seededDataReady = useMemo(
     () => sharedItineraries.length > 0 || rankings.length > 0 || seedSharedRoutes.length > 0 || seedRanking.length > 0,

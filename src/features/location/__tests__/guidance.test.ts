@@ -15,6 +15,7 @@ describe("guidance", () => {
     const event = createLocationEvent({
       session: {
         id: "trip-123",
+        syncStatus: "synced",
         itineraryId: "itinerary-1",
         currentDay: 1,
         currentStopOrder: 1,
