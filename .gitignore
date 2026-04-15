@@ -33,6 +33,8 @@ yarn-error.*
 # local env files
 .env
 .env*.local
+.claude/
+.codex-web-check.png
 
 # typescript
 *.tsbuildinfo
@@ -40,3 +42,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Supabase local temp files
+supabase/.temp/

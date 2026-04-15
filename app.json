@@ -55,8 +55,10 @@
       [
         "expo-location",
         {
+          "locationWhenInUsePermission": "Busan Mate uses your location to guide you between stops and suggest nearby alternatives.",
           "locationAlwaysAndWhenInUsePermission": "Busan Mate uses your location to keep your trip on track in real time.",
-          "locationAlwaysPermission": "Busan Mate uses your location in the background to alert you before the next departure."
+          "locationAlwaysPermission": "Busan Mate uses your location in the background to alert you before the next departure.",
+          "isIosBackgroundLocationEnabled": true
         }
       ]
     ],

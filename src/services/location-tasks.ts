@@ -1,13 +1,31 @@
 import * as Location from "expo-location";
-import * as Notifications from "expo-notifications";
 import * as TaskManager from "expo-task-manager";
-import { Platform } from "react-native";
 
 import { readStoredProfile } from "./auth-service";
 import { createLocationEvent, evaluateTrackingUpdate } from "../features/location/guidance";
+import { supportsBackgroundLiveGuide } from "../lib/expo-runtime";
 import { Itinerary, TripSession } from "../types/domain";
 import { LOCATION_TASK_NAME, readTrackingState, saveTrackingState } from "./location-service";
 import { ingestLocationEvent } from "./session-service";
+
+const scheduleGuideNotification = async (body: string) => {
+  if (!supportsBackgroundLiveGuide) {
+    return;
+  }
+
+  try {
+    const Notifications = await import("expo-notifications");
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Busan Mate",
+        body,
+      },
+      trigger: null,
+    });
+  } catch (error) {
+    console.warn("[location-tasks] Unable to schedule a live guide notification.", error);
+  }
+};
 
 if (!TaskManager.isTaskDefined(LOCATION_TASK_NAME)) {
   TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
@@ -36,15 +54,11 @@ if (!TaskManager.isTaskDefined(LOCATION_TASK_NAME)) {
     });
 
     if (result.shouldNotify) {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "Busan Mate",
-          body: result.deviated
-            ? "일정이 조금 밀리고 있어요. 실내 대체 루트를 열어볼까요?"
-            : "다음 장소로 이동할 시간이 가까워졌어요.",
-        },
-        trigger: null,
-      });
+      await scheduleGuideNotification(
+        result.deviated
+          ? "일정이 조금 밀리고 있어요. 실내 대체 루트를 열어볼까요?"
+          : "다음 장소로 이동할 시간이 가까워졌어요."
+      );
     }
 
     const nextSession: TripSession = {
@@ -70,7 +84,7 @@ if (!TaskManager.isTaskDefined(LOCATION_TASK_NAME)) {
 }
 
 export const startBackgroundTracking = async (itinerary: Itinerary, session: TripSession) => {
-  if (Platform.OS === "web") {
+  if (!supportsBackgroundLiveGuide) {
     return;
   }
 
@@ -91,7 +105,7 @@ export const startBackgroundTracking = async (itinerary: Itinerary, session: Tri
 };
 
 export const stopBackgroundTracking = async () => {
-  if (Platform.OS === "web") {
+  if (!supportsBackgroundLiveGuide) {
     return;
   }
 

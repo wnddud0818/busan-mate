@@ -1,26 +1,88 @@
 import { appEnv, hasOdsayApiKey, hasSupabaseConfig, hasTourApiKey } from "../config/env";
 import { seedPlaces } from "../data/seed";
 import {
-  estimatedSpendFromPriceLevel,
   getStartAreaOrDefault,
   normalizeTripPreferences,
 } from "../features/itinerary/planning";
 import { buildFallbackItinerary, buildTransitLeg, validateStructuredItinerary } from "../features/itinerary/planner";
+import {
+  buildTourPlaceFromApi,
+  getTourDetailEndpoint,
+  VisitKoreaDetailItem,
+  VisitKoreaListItem,
+} from "../features/itinerary/tour-pricing";
 import { supabase } from "../lib/supabase";
 import { AppLocale, GenerateItineraryResponse, Itinerary, Place, TransitLeg, TripPreferences } from "../types/domain";
 import { fetchWeatherSnapshot } from "./weather-service";
+import { Platform } from "react-native";
 
-const mapTourCategory = (contentTypeId?: string) => {
-  switch (contentTypeId) {
-    case "39":
-      return ["food"] as const;
-    case "14":
-      return ["culture", "history"] as const;
-    case "12":
-      return ["photospot", "nature"] as const;
-    default:
-      return ["culture"] as const;
+const TOUR_API_BASE_URL = "https://apis.data.go.kr/B551011/KorService2";
+
+const resolveOdsayApiKey = () => {
+  if (Platform.OS === "android") {
+    return appEnv.odsayApiKeyAndroid || appEnv.odsayApiKey;
   }
+
+  if (Platform.OS === "ios") {
+    return appEnv.odsayApiKeyIos || appEnv.odsayApiKey;
+  }
+
+  return appEnv.odsayApiKey;
+};
+
+const normalizeDetailItems = (payload: unknown): VisitKoreaDetailItem[] => {
+  const items = (payload as { response?: { body?: { items?: { item?: unknown } } } })?.response?.body?.items?.item;
+
+  if (Array.isArray(items)) {
+    return items as VisitKoreaDetailItem[];
+  }
+
+  return items ? [items as VisitKoreaDetailItem] : [];
+};
+
+const fetchVisitKoreaDetailItems = async (
+  contentId: string,
+  contentTypeId?: string
+): Promise<VisitKoreaDetailItem[]> => {
+  const endpoint = getTourDetailEndpoint(contentTypeId);
+  if (!endpoint) {
+    return [];
+  }
+
+  const params = new URLSearchParams({
+    MobileOS: "ETC",
+    MobileApp: "BusanMate",
+    _type: "json",
+    contentId,
+    numOfRows: "20",
+    pageNo: "1",
+    serviceKey: appEnv.tourApiKey,
+  });
+
+  if (contentTypeId) {
+    params.set("contentTypeId", contentTypeId);
+  }
+
+  const response = await fetch(`${TOUR_API_BASE_URL}/${endpoint}?${params.toString()}`);
+  if (!response.ok) {
+    throw new Error(`VisitKorea ${endpoint} failed`);
+  }
+
+  return normalizeDetailItems(await response.json());
+};
+
+const mapVisitKoreaItemToPlace = async (item: VisitKoreaListItem, index: number): Promise<Place> => {
+  const contentId = item.contentid ? String(item.contentid) : "";
+  const detailItems =
+    contentId.length > 0
+      ? await fetchVisitKoreaDetailItems(contentId, item.contenttypeid).catch(() => [])
+      : [];
+
+  return buildTourPlaceFromApi({
+    item,
+    detailItems,
+    index,
+  });
 };
 
 const fetchVisitKoreaPlaces = async (): Promise<Place[]> => {
@@ -34,55 +96,31 @@ const fetchVisitKoreaPlaces = async (): Promise<Place[]> => {
     serviceKey: appEnv.tourApiKey,
   });
 
-  const response = await fetch(
-    `https://apis.data.go.kr/B551011/KorService2/areaBasedList2?${params.toString()}`
-  );
+  const response = await fetch(`${TOUR_API_BASE_URL}/areaBasedList2?${params.toString()}`);
 
   if (!response.ok) {
     throw new Error("VisitKorea area list failed");
   }
 
   const payload = await response.json();
-  const items = payload?.response?.body?.items?.item;
+  const items = payload?.response?.body?.items?.item as VisitKoreaListItem[] | VisitKoreaListItem | undefined;
   if (!Array.isArray(items)) {
-    return [];
+    return items?.mapx && items?.mapy && items?.title ? [await mapVisitKoreaItemToPlace(items, 0)] : [];
   }
 
-  return items
-    .filter((item) => item?.mapx && item?.mapy && item?.title)
-    .map((item, index) => {
-      const categories = [...mapTourCategory(item.contenttypeid)];
+  const candidates = items.filter((item) => item?.mapx && item?.mapy && item?.title);
+  const batchSize = 5;
+  const places: Place[] = [];
 
-      return {
-        id: `tour-${item.contentid ?? index}`,
-        slug: String(item.title).toLowerCase().replace(/\s+/g, "-"),
-        district: item.addr1 ?? "Busan",
-        categories,
-        name: {
-          ko: item.title,
-          en: item.title,
-        },
-        description: {
-          ko: item.addr1 ?? "부산 관광 데이터 기반 추천 장소입니다.",
-          en: item.addr1 ?? "Recommended from the Korea Tourism public dataset.",
-        },
-        signatureStory: {
-          ko: item.addr1 ?? "공공 관광 데이터에서 불러온 장소입니다.",
-          en: item.addr1 ?? "Collected from public tourism data.",
-        },
-        coordinates: {
-          latitude: Number(item.mapy),
-          longitude: Number(item.mapx),
-        },
-        indoor: item.contenttypeid === "14" || item.contenttypeid === "39",
-        accessibility: true,
-        recommendedStayMinutes: 60,
-        popularity: 70 - index,
-        crowdBase: 40,
-        priceLevel: "balanced",
-        estimatedSpendKrw: estimatedSpendFromPriceLevel("balanced", categories),
-      };
-    });
+  for (let index = 0; index < candidates.length; index += batchSize) {
+    const batch = candidates.slice(index, index + batchSize);
+    const batchPlaces = await Promise.all(
+      batch.map((item, batchIndex) => mapVisitKoreaItemToPlace(item, index + batchIndex))
+    );
+    places.push(...batchPlaces);
+  }
+
+  return places;
 };
 
 const fetchOdsayTransit = async (
@@ -90,12 +128,17 @@ const fetchOdsayTransit = async (
   to: Place,
   mobilityMode: TripPreferences["mobilityMode"] = "mixed"
 ): Promise<TransitLeg | null> => {
+  const odsayApiKey = resolveOdsayApiKey();
+  if (!odsayApiKey) {
+    return null;
+  }
+
   const params = new URLSearchParams({
     SX: String(from.coordinates.longitude),
     SY: String(from.coordinates.latitude),
     EX: String(to.coordinates.longitude),
     EY: String(to.coordinates.latitude),
-    apiKey: appEnv.odsayApiKey,
+    apiKey: odsayApiKey,
   });
   const response = await fetch(`https://api.odsay.com/v1/api/searchPubTransPathT?${params.toString()}`);
 

@@ -25,6 +25,8 @@ pnpm start
 - `EXPO_PUBLIC_OPENAI_MODEL`
 - `EXPO_PUBLIC_TOUR_API_KEY`
 - `EXPO_PUBLIC_ODSAY_API_KEY`
+- `EXPO_PUBLIC_ODSAY_API_KEY_ANDROID` (optional)
+- `EXPO_PUBLIC_ODSAY_API_KEY_IOS` (optional)
 
 If keys are missing, the app automatically falls back to seeded Busan data and local itinerary generation.
 

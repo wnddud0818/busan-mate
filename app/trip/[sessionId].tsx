@@ -5,6 +5,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen } from "../../src/components/common/screen";
 import { SectionCard } from "../../src/components/common/section-card";
 import { buildIndoorFallback } from "../../src/features/itinerary/planner";
+import { getLiveGuideUnsupportedMessage, isExpoGo } from "../../src/lib/expo-runtime";
 import {
   clearTrackingState,
   evaluateCurrentLocation,
@@ -83,9 +84,16 @@ export default function LiveGuidePage() {
 
     if (granted) {
       await startBackgroundTracking(result.itinerary, result.session);
-      Alert.alert("Busan Mate", locale === "ko" ? "?꾩튂 媛?대뱶媛 耳쒖죱?댁슂." : "Live location guidance is now on.");
+      Alert.alert("Busan Mate", locale === "ko" ? "위치 기반 안내가 켜졌어요." : "Live location guidance is now on.");
     } else {
-      Alert.alert("Busan Mate", locale === "ko" ? "?섎룞 媛?대뱶濡?怨꾩냽 吏꾪뻾?⑸땲??" : "Continuing in manual guide mode.");
+      Alert.alert(
+        "Busan Mate",
+        isExpoGo
+          ? getLiveGuideUnsupportedMessage(locale)
+          : locale === "ko"
+            ? "수동 가이드로 계속 진행합니다."
+            : "Continuing in manual guide mode."
+      );
     }
   };
 
@@ -110,18 +118,18 @@ export default function LiveGuidePage() {
       if (snapshot.status.deviated) {
         setStatusMessage(
           locale === "ko"
-            ? "?쇱젙 ?댄깉??媛먯??섏뼱 ?ㅻ궡 ?泥?肄붿뒪瑜?異붿쿇?⑸땲??"
+            ? "일정 이탈이 감지돼서 실내 대체 코스를 추천해요."
             : "Schedule drift detected. Try the indoor fallback route."
         );
       } else if (snapshot.status.shouldNotify) {
         setStatusMessage(
-          locale === "ko" ? "?ㅼ쓬 ?μ냼濡??대룞???쒖젏??媛源뚯썙議뚯뼱??" : "It is almost time to leave for the next stop."
+          locale === "ko" ? "다음 장소로 이동할 시간이 가까워졌어요." : "It is almost time to leave for the next stop."
         );
       } else {
-        setStatusMessage(locale === "ko" ? "?꾩옱 猷⑦듃瑜????곕씪媛怨??덉뼱??" : "You are tracking the route well.");
+        setStatusMessage(locale === "ko" ? "현재 경로를 잘 따라가고 있어요." : "You are tracking the route well.");
       }
     } catch {
-      setStatusMessage(locale === "ko" ? "?꾩옱 ?꾩튂瑜??뺤씤?섏? 紐삵뻽?댁슂." : "Unable to read your current location.");
+      setStatusMessage(locale === "ko" ? "현재 위치를 확인하지 못했어요." : "Unable to read your current location.");
     }
   };
 
@@ -173,36 +181,36 @@ export default function LiveGuidePage() {
   };
 
   return (
-    <Screen title={locale === "ko" ? "?ㅼ떆媛?媛?대뱶" : "Live guide"} subtitle={itinerary.title[locale]}>
+    <Screen title={locale === "ko" ? "실시간 가이드" : "Live guide"} subtitle={itinerary.title[locale]}>
       <SectionCard title={currentStop.place.name[locale]} hint={currentStop.place.description[locale]}>
         <Text style={styles.copy}>
           {locale === "ko"
-            ? `?꾩옱 ${currentStop.place.district} 援ш컙???덈궡 以묒엯?덈떎.`
+            ? `현재 ${currentStop.place.district} 구간을 안내 중입니다.`
             : `Currently guiding you through ${currentStop.place.district}.`}
         </Text>
         {nextStop ? (
           <Text style={styles.next}>
-            {locale === "ko" ? "?ㅼ쓬 ?대룞" : "Next move"}: {nextStop.place.name[locale]}
+            {locale === "ko" ? "다음 이동" : "Next move"}: {nextStop.place.name[locale]}
           </Text>
         ) : null}
       </SectionCard>
 
-      <SectionCard title={locale === "ko" ? "媛?대뱶 ?≪뀡" : "Guide actions"}>
+      <SectionCard title={locale === "ko" ? "가이드 메뉴" : "Guide actions"}>
         <View style={styles.buttonGrid}>
           <Pressable style={styles.primaryButton} onPress={enableGuidance}>
-            <Text style={styles.primaryText}>{locale === "ko" ? "?꾩튂 媛?대뱶 耳쒓린" : "Enable location guide"}</Text>
+            <Text style={styles.primaryText}>{locale === "ko" ? "위치 가이드 켜기" : "Enable location guide"}</Text>
           </Pressable>
           <Pressable style={styles.secondaryButton} onPress={checkLocationNow}>
-            <Text style={styles.secondaryText}>{locale === "ko" ? "吏湲??꾩튂 ?뺤씤" : "Check my location"}</Text>
+            <Text style={styles.secondaryText}>{locale === "ko" ? "지금 위치 확인" : "Check my location"}</Text>
           </Pressable>
           <Pressable style={styles.secondaryButton} onPress={moveToNextStop}>
-            <Text style={styles.secondaryText}>{locale === "ko" ? "?ㅼ쓬 ?대룞" : "Next move"}</Text>
+            <Text style={styles.secondaryText}>{locale === "ko" ? "다음 이동" : "Next move"}</Text>
           </Pressable>
           <Pressable style={styles.secondaryButton} onPress={rerouteIndoors}>
-            <Text style={styles.secondaryText}>{locale === "ko" ? "?ㅻ궡 ?泥?猷⑦듃" : "Indoor fallback route"}</Text>
+            <Text style={styles.secondaryText}>{locale === "ko" ? "실내 대체 루트" : "Indoor fallback route"}</Text>
           </Pressable>
           <Pressable style={styles.secondaryButton} onPress={endSession}>
-            <Text style={styles.secondaryText}>{locale === "ko" ? "?몃꽭??醫낅즺" : "End session"}</Text>
+            <Text style={styles.secondaryText}>{locale === "ko" ? "세션 종료" : "End session"}</Text>
           </Pressable>
           <Pressable
             style={styles.secondaryButton}
@@ -213,7 +221,7 @@ export default function LiveGuidePage() {
               )
             }
           >
-            <Text style={styles.secondaryText}>{locale === "ko" ? "?몃? 湲몄븞???덉빟" : "Open maps / booking"}</Text>
+            <Text style={styles.secondaryText}>{locale === "ko" ? "길안내 / 예약 열기" : "Open maps / booking"}</Text>
           </Pressable>
         </View>
       </SectionCard>
@@ -225,7 +233,7 @@ export default function LiveGuidePage() {
       ) : null}
 
       <Pressable style={styles.chatButton} onPress={() => router.push(`/trip/${activeSession.id}/guide`)}>
-        <Text style={styles.chatText}>{locale === "ko" ? "媛?대뱶?먭쾶 臾쇱뼱蹂닿린" : "Ask the guide"}</Text>
+        <Text style={styles.chatText}>{locale === "ko" ? "가이드에게 물어보기" : "Ask the guide"}</Text>
       </Pressable>
     </Screen>
   );

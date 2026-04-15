@@ -7,6 +7,7 @@ import { GuestUpgradeCard } from "../../src/components/common/guest-upgrade-card
 import { Screen } from "../../src/components/common/screen";
 import { SectionCard } from "../../src/components/common/section-card";
 import { StopCard } from "../../src/components/itinerary/stop-card";
+import { getLiveGuideUnsupportedMessage, isExpoGo } from "../../src/lib/expo-runtime";
 import { sendMagicLink } from "../../src/services/auth-service";
 import {
   openNavigationLink,
@@ -121,6 +122,10 @@ export default function ItineraryDetailPage() {
     upsertItinerary(result.itinerary);
     updateSession(result.session);
     await saveTrackingState(result.itinerary, result.session);
+
+    if (askPermission && !permissionGranted && isExpoGo) {
+      Alert.alert("Busan Mate", getLiveGuideUnsupportedMessage(locale));
+    }
 
     router.push(destination === "live" ? `/trip/${result.session.id}` : `/trip/${result.session.id}/guide`);
   };

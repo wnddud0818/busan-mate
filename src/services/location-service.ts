@@ -1,10 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Linking from "expo-linking";
 import * as Location from "expo-location";
-import * as Notifications from "expo-notifications";
-import { Platform } from "react-native";
 
 import { createLocationEvent, evaluateTrackingUpdate } from "../features/location/guidance";
+import { supportsBackgroundLiveGuide } from "../lib/expo-runtime";
 import { Itinerary, TripSession } from "../types/domain";
 
 export const TRACKING_STATE_KEY = "busan-mate-tracking-state";
@@ -16,19 +15,28 @@ export type TrackingState = {
 };
 
 export const requestLiveGuidePermissions = async () => {
-  if (Platform.OS === "web") {
+  if (!supportsBackgroundLiveGuide) {
     return false;
   }
 
-  const foreground = await Location.requestForegroundPermissionsAsync();
-  const notification = await Notifications.requestPermissionsAsync();
+  try {
+    const foreground = await Location.requestForegroundPermissionsAsync();
+    if (foreground.status !== "granted") {
+      return false;
+    }
 
-  if (foreground.status !== "granted" || notification.status !== "granted") {
+    const Notifications = await import("expo-notifications");
+    const notification = await Notifications.requestPermissionsAsync();
+    if (notification.status !== "granted") {
+      return false;
+    }
+
+    const background = await Location.requestBackgroundPermissionsAsync();
+    return background.status === "granted";
+  } catch (error) {
+    console.warn("[location-service] Unable to request live guide permissions.", error);
     return false;
   }
-
-  const background = await Location.requestBackgroundPermissionsAsync();
-  return background.status === "granted";
 };
 
 export const openNavigationLink = async (url: string) => {
