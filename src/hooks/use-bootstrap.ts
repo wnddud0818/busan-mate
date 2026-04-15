@@ -1,9 +1,10 @@
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useMemo, useState } from "react";
 
-import i18n from "../lib/i18n";
 import { seedRanking, seedSharedRoutes } from "../data/seed";
+import i18n from "../lib/i18n";
 import { bootstrapAuth } from "../services/auth-service";
+import { readTrackingState } from "../services/location-service";
 import { useAppStore } from "../stores/app-store";
 
 void SplashScreen.preventAutoHideAsync();
@@ -13,6 +14,7 @@ export const useBootstrap = () => {
   const locale = useAppStore((state) => state.locale);
   const sharedItineraries = useAppStore((state) => state.sharedItineraries);
   const rankings = useAppStore((state) => state.rankings);
+  const { restoreTrackingState, setUserProfile } = useAppStore((state) => state.actions);
   const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
@@ -26,10 +28,11 @@ export const useBootstrap = () => {
 
     let cancelled = false;
 
-    bootstrapAuth()
-      .then((profile) => {
+    Promise.all([bootstrapAuth(), readTrackingState()])
+      .then(([profile, trackingState]) => {
         if (!cancelled) {
-          useAppStore.getState().actions.setUserProfile(profile);
+          setUserProfile(profile);
+          restoreTrackingState(trackingState);
         }
       })
       .finally(() => {
@@ -42,7 +45,7 @@ export const useBootstrap = () => {
     return () => {
       cancelled = true;
     };
-  }, [hydrated]);
+  }, [hydrated, restoreTrackingState, setUserProfile]);
 
   const seededDataReady = useMemo(
     () => sharedItineraries.length > 0 || rankings.length > 0 || seedSharedRoutes.length > 0 || seedRanking.length > 0,

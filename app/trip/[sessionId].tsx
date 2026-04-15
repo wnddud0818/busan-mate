@@ -17,7 +17,7 @@ export default function LiveGuidePage() {
   const itinerary = useAppStore((state) =>
     state.itineraries.find((item) => item.id === activeSession?.itineraryId)
   );
-  const { addLocationEvent, setLocationConsent, updateSession, upsertItinerary, refreshRankings } =
+  const { addLocationEvent, setLocationConsent, updateSession, upsertItinerary } =
     useAppStore((state) => state.actions);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -66,7 +66,6 @@ export default function LiveGuidePage() {
     try {
       const snapshot = await evaluateCurrentLocation(itinerary, activeSession);
       addLocationEvent(snapshot.event);
-      refreshRankings();
       if (snapshot.status.deviated) {
         setStatusMessage(
           locale === "ko"

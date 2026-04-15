@@ -14,15 +14,21 @@ export default function RankingTab() {
   const rankings = useAppStore((state) => state.rankings);
   const { refreshRankings } = useAppStore((state) => state.actions);
   const { t } = useTranslation();
+  const sharedSignature = sharedItineraries
+    .map((item) => `${item.id}:${item.ratingAverage}:${item.currentTravelers}:${item.score}`)
+    .join("|");
+  const locationSignature = locationEvents
+    .map((item) => `${item.id}:${item.tripSessionId}:${item.capturedAt}`)
+    .join("|");
 
   const rankingQuery = useQuery({
-    queryKey: ["rankings", sharedItineraries.length, locationEvents.length],
+    queryKey: ["rankings", sharedSignature, locationSignature],
     queryFn: () => loadRankings({ sharedItineraries, locationEvents }),
   });
 
   useEffect(() => {
     refreshRankings();
-  }, [refreshRankings, sharedItineraries.length, locationEvents.length]);
+  }, [locationSignature, refreshRankings, sharedSignature]);
 
   const list = rankingQuery.data ?? rankings;
 

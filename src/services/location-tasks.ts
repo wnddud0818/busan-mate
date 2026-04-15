@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import * as Notifications from "expo-notifications";
 import * as TaskManager from "expo-task-manager";
@@ -6,12 +5,7 @@ import { Platform } from "react-native";
 
 import { createLocationEvent, evaluateTrackingUpdate } from "../features/location/guidance";
 import { Itinerary, TripSession } from "../types/domain";
-import { LOCATION_TASK_NAME, TRACKING_STATE_KEY } from "./location-service";
-
-type TrackingState = {
-  itinerary: Itinerary;
-  session: TripSession;
-};
+import { LOCATION_TASK_NAME, readTrackingState, saveTrackingState } from "./location-service";
 
 if (!TaskManager.isTaskDefined(LOCATION_TASK_NAME)) {
   TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
@@ -25,12 +19,12 @@ if (!TaskManager.isTaskDefined(LOCATION_TASK_NAME)) {
       return;
     }
 
-    const stored = await AsyncStorage.getItem(TRACKING_STATE_KEY);
-    if (!stored) {
+    const trackingState = await readTrackingState();
+    if (!trackingState) {
       return;
     }
 
-    const { itinerary, session } = JSON.parse(stored) as TrackingState;
+    const { itinerary, session } = trackingState;
     const nowIso = new Date().toISOString();
     const result = evaluateTrackingUpdate({
       itinerary,
@@ -56,12 +50,7 @@ if (!TaskManager.isTaskDefined(LOCATION_TASK_NAME)) {
       lastAlertAt: result.shouldNotify ? nowIso : session.lastAlertAt,
     };
 
-    const nextPayload: TrackingState = {
-      itinerary,
-      session: nextSession,
-    };
-
-    await AsyncStorage.setItem(TRACKING_STATE_KEY, JSON.stringify(nextPayload));
+    await saveTrackingState(itinerary, nextSession);
     createLocationEvent({
       session: nextSession,
       coordinates: latest.coords,
@@ -75,13 +64,7 @@ export const startBackgroundTracking = async (itinerary: Itinerary, session: Tri
     return;
   }
 
-  await AsyncStorage.setItem(
-    TRACKING_STATE_KEY,
-    JSON.stringify({
-      itinerary,
-      session,
-    })
-  );
+  await saveTrackingState(itinerary, session);
 
   const isStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
   if (isStarted) {

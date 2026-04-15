@@ -18,7 +18,7 @@ export default function ItineraryDetailPage() {
   const locale = useAppStore((state) => state.locale);
   const itinerary = useAppStore((state) => state.itineraries.find((item) => item.id === params.id));
   const profile = useAppStore((state) => state.userProfile);
-  const { startSession, setUserProfile, publishItineraryLocally, applyRating, setLocationConsent } =
+  const { startSession, updateSession, setUserProfile, publishItineraryLocally, applyRating, setLocationConsent } =
     useAppStore((state) => state.actions);
   const { t } = useTranslation();
 
@@ -60,12 +60,14 @@ export default function ItineraryDetailPage() {
   const startLiveGuide = async () => {
     const session = startSession(itinerary);
     const permissionGranted = await requestLiveGuidePermissions();
-    setLocationConsent(permissionGranted);
-    await saveTrackingState(itinerary, {
+    const nextSession = {
       ...session,
       locationConsent: permissionGranted,
-    });
-    router.push(`/trip/${session.id}`);
+    };
+    setLocationConsent(permissionGranted);
+    updateSession(nextSession);
+    await saveTrackingState(itinerary, nextSession);
+    router.push(`/trip/${nextSession.id}`);
   };
 
   return (

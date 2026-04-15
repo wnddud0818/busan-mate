@@ -10,6 +10,11 @@ import { Itinerary, TripSession } from "../types/domain";
 export const TRACKING_STATE_KEY = "busan-mate-tracking-state";
 export const LOCATION_TASK_NAME = "busan-mate-live-location";
 
+export type TrackingState = {
+  itinerary: Itinerary;
+  session: TripSession;
+};
+
 export const requestLiveGuidePermissions = async () => {
   if (Platform.OS === "web") {
     return false;
@@ -40,14 +45,18 @@ export const saveTrackingState = async (itinerary: Itinerary, session: TripSessi
   );
 };
 
-export const readTrackingState = async () => {
+export const readTrackingState = async (): Promise<TrackingState | null> => {
   const stored = await AsyncStorage.getItem(TRACKING_STATE_KEY);
-  return stored
-    ? (JSON.parse(stored) as {
-        itinerary: Itinerary;
-        session: TripSession;
-      })
-    : null;
+  if (!stored) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(stored) as TrackingState;
+  } catch {
+    await AsyncStorage.removeItem(TRACKING_STATE_KEY);
+    return null;
+  }
 };
 
 export const evaluateCurrentLocation = async (itinerary: Itinerary, session: TripSession) => {
