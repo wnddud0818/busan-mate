@@ -16,6 +16,10 @@ const buildItinerary = (): Itinerary => ({
   shareStatus: "private",
   preferences: {
     tripDays: 1,
+    totalBudgetKrw: 120000,
+    partySize: 2,
+    travelDate: "2026-04-16",
+    startAreaId: "seomyeon",
     companionType: "friends",
     interests: ["food", "night"],
     budgetLevel: "balanced",
@@ -23,7 +27,6 @@ const buildItinerary = (): Itinerary => ({
     accessibilityNeeds: false,
     indoorFallback: false,
     locale: "ko",
-    startDistrict: "Seomyeon",
   },
   days: [
     {
@@ -33,9 +36,9 @@ const buildItinerary = (): Itinerary => ({
         {
           id: "stop-1",
           order: 1,
-          date: "2026-04-15",
-          startTime: "2026-04-15T09:00:00.000Z",
-          endTime: "2026-04-15T10:00:00.000Z",
+          date: "2026-04-16",
+          startTime: "2026-04-16T09:00:00.000Z",
+          endTime: "2026-04-16T10:00:00.000Z",
           highlight: { ko: "하이라이트", en: "Highlight" },
           note: { ko: "노트", en: "Note" },
           place: {
@@ -53,6 +56,7 @@ const buildItinerary = (): Itinerary => ({
             popularity: 90,
             crowdBase: 50,
             priceLevel: "balanced",
+            estimatedSpendKrw: 24000,
           },
         },
       ],
@@ -60,6 +64,36 @@ const buildItinerary = (): Itinerary => ({
   ],
   ratingAverage: 4,
   estimatedBudgetLabel: { ko: "1인 7만~12만 원", en: "KRW 70k-120k per person" },
+  planningMeta: {
+    startArea: {
+      id: "seomyeon",
+      name: { ko: "서면", en: "Seomyeon" },
+      district: { ko: "부산진구", en: "Busanjin-gu" },
+      coordinates: { latitude: 35.1578, longitude: 129.0592 },
+    },
+    weatherSnapshot: {
+      status: "live",
+      source: "open-meteo",
+      date: "2026-04-16",
+      signal: "mixed",
+      summary: {
+        ko: "무난한 날씨라 실내외를 균형 있게 섞었어요.",
+        en: "Mild weather supports a balanced indoor and outdoor mix.",
+      },
+      weatherCode: 1,
+      temperatureMaxC: 18,
+      temperatureMinC: 11,
+      precipitationProbabilityMax: 10,
+    },
+    budgetSummary: {
+      totalBudgetKrw: 120000,
+      estimatedTotalKrw: 52000,
+      estimatedPerPersonKrw: 26000,
+      remainingBudgetKrw: 68000,
+      strategy: "within",
+      summary: { ko: "예산 12만원 중 예상 5.2만원", en: "KRW 52k estimated out of KRW 120k" },
+    },
+  },
 });
 
 const buildSession = (): TripSession => ({
@@ -100,9 +134,7 @@ describe("app store state sync", () => {
     const published = useAppStore
       .getState()
       .sharedItineraries.find((item) => item.itineraryId === itinerary.id);
-    const ranking = useAppStore
-      .getState()
-      .rankings.find((item) => item.itineraryId === itinerary.id);
+    const ranking = useAppStore.getState().rankings.find((item) => item.itineraryId === itinerary.id);
 
     expect(published?.ratingAverage).toBe(4.5);
     expect(ranking?.itineraryId).toBe(itinerary.id);
@@ -145,14 +177,10 @@ describe("app store state sync", () => {
     useAppStore.getState().actions.publishItineraryLocally(itinerary.id);
 
     const before =
-      useAppStore
-        .getState()
-        .rankings.find((item) => item.itineraryId === itinerary.id)?.currentTravelers ?? 0;
+      useAppStore.getState().rankings.find((item) => item.itineraryId === itinerary.id)?.currentTravelers ?? 0;
     useAppStore.getState().actions.addLocationEvent(buildLocationEvent());
     const after =
-      useAppStore
-        .getState()
-        .rankings.find((item) => item.itineraryId === itinerary.id)?.currentTravelers ?? 0;
+      useAppStore.getState().rankings.find((item) => item.itineraryId === itinerary.id)?.currentTravelers ?? 0;
 
     expect(after).toBeGreaterThan(before);
   });

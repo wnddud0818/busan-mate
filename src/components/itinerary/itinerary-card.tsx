@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { colors, radii, spacing } from "../../theme/tokens";
 import { Itinerary } from "../../types/domain";
+import { formatKrwCompact } from "../../utils/currency";
 import { tText } from "../../utils/localized";
 
 export const ItineraryCard = ({
@@ -20,8 +21,15 @@ export const ItineraryCard = ({
     </View>
     <Text style={styles.title}>{tText(itinerary.title, locale)}</Text>
     <Text style={styles.summary}>{tText(itinerary.summary, locale)}</Text>
+    <Text style={styles.meta}>
+      {tText(itinerary.planningMeta?.budgetSummary.summary ?? itinerary.estimatedBudgetLabel, locale)}
+    </Text>
+    <Text style={styles.meta}>{tText(itinerary.planningMeta?.weatherSnapshot.summary ?? itinerary.summary, locale)}</Text>
     <Text style={styles.footer}>
-      {itinerary.days.length} days · {tText(itinerary.estimatedBudgetLabel, locale)}
+      {itinerary.days.length} days ·{" "}
+      {itinerary.planningMeta
+        ? formatKrwCompact(itinerary.planningMeta.budgetSummary.estimatedTotalKrw, locale)
+        : tText(itinerary.estimatedBudgetLabel, locale)}
     </Text>
   </Pressable>
 );
@@ -59,6 +67,11 @@ const styles = StyleSheet.create({
     color: "rgba(248,251,253,0.74)",
     fontSize: 13,
     lineHeight: 19,
+  },
+  meta: {
+    color: "rgba(248,251,253,0.68)",
+    fontSize: 12,
+    lineHeight: 18,
   },
   footer: {
     color: "rgba(248,251,253,0.58)",

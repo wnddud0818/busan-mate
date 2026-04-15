@@ -5,6 +5,10 @@ describe("guide answerer", () => {
   it("answers story questions from stop context", () => {
     const itinerary = buildFallbackItinerary({
       tripDays: 1,
+      totalBudgetKrw: 120000,
+      partySize: 1,
+      travelDate: "2026-04-16",
+      startAreaId: "nampo",
       companionType: "solo",
       interests: ["history", "culture"],
       budgetLevel: "balanced",
@@ -12,11 +16,10 @@ describe("guide answerer", () => {
       accessibilityNeeds: false,
       indoorFallback: true,
       locale: "ko",
-      startDistrict: "Nampo",
     });
 
     const stop = itinerary.days[0]!.stops[0]!;
-    const answer = buildGuideAnswer("왜 유명해?", {
+    const answer = buildGuideAnswer("이 장소 설명해줘", {
       itinerary,
       stop,
       locale: "ko",

@@ -1,51 +1,121 @@
-import { addDays, addMinutes, formatISO } from "date-fns";
+import { addDays, addMinutes, formatISO, parseISO } from "date-fns";
 import { getDistance } from "geolib";
 
+import { startAreas } from "../../data/start-areas";
 import { seedPlaces } from "../../data/seed";
 import {
   AppLocale,
+  Coordinates,
   Itinerary,
   ItineraryDay,
   ItineraryStop,
   Place,
+  StartArea,
   TransitLeg,
   TripPreferences,
+  WeatherSnapshot,
 } from "../../types/domain";
 import { createId } from "../../utils/id";
 import { buildNavigationLinks } from "../../utils/maps";
 import { tText } from "../../utils/localized";
+import { buildBudgetSummary, getStartAreaOrDefault, makeBudgetLabel, normalizeTripPreferences } from "./planning";
 import { itinerarySchema } from "./schema";
 
 type ScoredPlace = Place & { score: number };
 
-const baseDate = new Date("2026-04-10T09:00:00+09:00");
+const neutralWeatherSnapshot = (travelDate: string): WeatherSnapshot => ({
+  status: "unavailable",
+  source: "fallback",
+  date: travelDate,
+  signal: "mixed",
+  summary: {
+    ko: "날씨 정보를 불러오지 못해 실내외 균형형 경로로 추천했어요.",
+    en: "Weather data was unavailable, so we built a balanced route.",
+  },
+});
 
-export const scorePlaces = (preferences: TripPreferences, places = seedPlaces): ScoredPlace[] =>
-  places
+const estimateTransitFareKrw = (distanceKm: number, mode: TripPreferences["mobilityMode"] = "mixed") => {
+  if (distanceKm < 1.3 || mode === "walk") {
+    return 0;
+  }
+
+  if (distanceKm < 4) {
+    return 1600;
+  }
+
+  if (distanceKm < 9) {
+    return 1900;
+  }
+
+  return 2200;
+};
+
+const weatherScore = (place: Place, weatherSnapshot: WeatherSnapshot) => {
+  switch (weatherSnapshot.signal) {
+    case "rainy":
+      return (place.indoor ? 22 : -10) + (place.accessibility ? 6 : 0);
+    case "clear":
+      return place.categories.includes("nature") || place.categories.includes("photospot") ? 16 : 2;
+    case "heat":
+      return (place.indoor ? 18 : -4) + (place.accessibility ? 4 : 0);
+    case "cold":
+      return place.indoor ? 15 : 1;
+    default:
+      return place.indoor ? 6 : 4;
+  }
+};
+
+const distanceScore = (place: Place, startArea: StartArea) => {
+  const distanceKm = getDistance(place.coordinates, startArea.coordinates) / 1000;
+
+  if (distanceKm < 2.5) {
+    return 16;
+  }
+
+  if (distanceKm < 6) {
+    return 10;
+  }
+
+  if (distanceKm < 11) {
+    return 5;
+  }
+
+  return 1;
+};
+
+export const scorePlaces = (
+  preferences: TripPreferences,
+  places = seedPlaces,
+  planningInput?: {
+    weatherSnapshot?: WeatherSnapshot;
+    startArea?: StartArea;
+  }
+): ScoredPlace[] => {
+  const normalized = normalizeTripPreferences(preferences);
+  const startArea = planningInput?.startArea ?? getStartAreaOrDefault(normalized.startAreaId);
+  const weatherSnapshot = planningInput?.weatherSnapshot ?? neutralWeatherSnapshot(normalized.travelDate);
+
+  return places
     .map((place) => {
       const interestScore = place.categories.reduce(
-        (total, category) => total + (preferences.interests.includes(category) ? 16 : 0),
+        (total, category) => total + (normalized.interests.includes(category) ? 16 : 0),
         0
       );
-      const accessibilityScore = preferences.accessibilityNeeds
-        ? place.accessibility
-          ? 24
-          : -18
-        : 8;
-      const fallbackScore = preferences.indoorFallback ? (place.indoor ? 18 : 4) : 0;
+      const accessibilityScore = normalized.accessibilityNeeds ? (place.accessibility ? 24 : -18) : 8;
+      const fallbackScore = normalized.indoorFallback ? (place.indoor ? 12 : 4) : 0;
       const mobilityScore =
-        preferences.mobilityMode === "walk"
+        normalized.mobilityMode === "walk"
           ? place.recommendedStayMinutes <= 80
             ? 10
             : 2
           : 12;
-      const budgetScore = place.priceLevel === preferences.budgetLevel ? 10 : 4;
+      const budgetScore = place.priceLevel === normalized.budgetLevel ? 12 : 5;
       const companionScore =
-        preferences.companionType === "family"
+        normalized.companionType === "family"
           ? place.accessibility
             ? 12
             : 4
-          : preferences.companionType === "couple"
+          : normalized.companionType === "couple"
             ? place.categories.includes("photospot")
               ? 10
               : 4
@@ -60,24 +130,29 @@ export const scorePlaces = (preferences: TripPreferences, places = seedPlaces): 
           mobilityScore +
           budgetScore +
           companionScore +
+          weatherScore(place, weatherSnapshot) +
+          distanceScore(place, startArea) +
           place.popularity * 0.35,
       };
     })
     .sort((left, right) => right.score - left.score);
+};
 
 export const buildTransitLeg = (
   fromPlace: Place,
   toPlace: Place,
   locale: AppLocale,
-  provider: "odsay" | "fallback" = "fallback"
+  provider: "odsay" | "fallback" = "fallback",
+  mobilityMode: TripPreferences["mobilityMode"] = "mixed"
 ): TransitLeg => {
   const meters = getDistance(fromPlace.coordinates, toPlace.coordinates);
   const distanceKm = Number((meters / 1000).toFixed(1));
   const durationMinutes =
     distanceKm < 1.3 ? Math.max(12, Math.round(distanceKm * 18)) : Math.round(distanceKm * 9 + 14);
+  const estimatedFareKrw = estimateTransitFareKrw(distanceKm, mobilityMode);
 
   const steps =
-    distanceKm < 1.3
+    distanceKm < 1.3 || mobilityMode === "walk"
       ? [
           {
             mode: "walk" as const,
@@ -98,7 +173,7 @@ export const buildTransitLeg = (
           {
             mode: "walk" as const,
             label: {
-              ko: "역/정류장 도보 연결",
+              ko: "역에서 도보 연결",
               en: "Short station-to-stop walk",
             },
           },
@@ -109,28 +184,126 @@ export const buildTransitLeg = (
     toPlaceId: toPlace.id,
     summary: {
       ko:
-        distanceKm < 1.3
+        distanceKm < 1.3 || mobilityMode === "walk"
           ? `${tText(fromPlace.name, locale)}에서 ${tText(toPlace.name, locale)}까지 도보 이동`
           : `${tText(fromPlace.name, locale)} -> ${tText(toPlace.name, locale)} 대중교통 이동`,
       en:
-        distanceKm < 1.3
+        distanceKm < 1.3 || mobilityMode === "walk"
           ? `Walk from ${tText(fromPlace.name, locale)} to ${tText(toPlace.name, locale)}`
           : `Transit from ${tText(fromPlace.name, locale)} to ${tText(toPlace.name, locale)}`,
     },
     durationMinutes,
     distanceKm,
+    estimatedFareKrw,
     provider,
     steps,
     navigationLinks: buildNavigationLinks(toPlace.coordinates),
   };
 };
 
+const targetStopCount = (tripDays: number, totalPlaces: number) => Math.min(totalPlaces, Math.max(4, tripDays * 3));
+
+const minimumStopCount = (tripDays: number, totalPlaces: number) =>
+  Math.min(totalPlaces, Math.max(tripDays, Math.min(3, totalPlaces)));
+
+const selectPlacesWithinBudget = (scored: ScoredPlace[], preferences: TripPreferences) => {
+  const targetStops = targetStopCount(preferences.tripDays, scored.length);
+  const minimumStops = minimumStopCount(preferences.tripDays, scored.length);
+  const selected: ScoredPlace[] = [];
+  let estimatedTotalKrw = 0;
+  const baseTransitCostPerLeg = preferences.mobilityMode === "walk" ? 0 : 1600 * preferences.partySize;
+
+  for (const place of scored) {
+    if (selected.length >= targetStops) {
+      break;
+    }
+
+    const addedCost =
+      place.estimatedSpendKrw * preferences.partySize + (selected.length > 0 ? baseTransitCostPerLeg : 0);
+
+    if (estimatedTotalKrw + addedCost <= preferences.totalBudgetKrw) {
+      selected.push(place);
+      estimatedTotalKrw += addedCost;
+    }
+  }
+
+  if (selected.length < minimumStops) {
+    for (const place of [...scored].sort(
+      (left, right) => left.estimatedSpendKrw - right.estimatedSpendKrw || right.score - left.score
+    )) {
+      if (selected.some((candidate) => candidate.id === place.id)) {
+        continue;
+      }
+
+      const addedCost =
+        place.estimatedSpendKrw * preferences.partySize + (selected.length > 0 ? baseTransitCostPerLeg : 0);
+      if (estimatedTotalKrw + addedCost > preferences.totalBudgetKrw) {
+        continue;
+      }
+
+      selected.push(place);
+      estimatedTotalKrw += addedCost;
+
+      if (selected.length >= minimumStops) {
+        break;
+      }
+    }
+  }
+
+  if (selected.length < minimumStops) {
+    return {
+      places: [...scored]
+        .sort((left, right) => left.estimatedSpendKrw - right.estimatedSpendKrw || right.score - left.score)
+        .slice(0, minimumStops),
+      strategy: "minimum" as const,
+    };
+  }
+
+  return {
+    places: selected,
+    strategy: "within" as const,
+  };
+};
+
+const orderPlacesForRoute = (places: ScoredPlace[], startArea: StartArea) => {
+  const remaining = [...places];
+  const ordered: ScoredPlace[] = [];
+  let anchor: Coordinates = startArea.coordinates;
+
+  while (remaining.length > 0) {
+    remaining.sort((left, right) => {
+      const leftDistanceKm = getDistance(anchor, left.coordinates) / 1000;
+      const rightDistanceKm = getDistance(anchor, right.coordinates) / 1000;
+      const leftRouteScore = left.score - leftDistanceKm * 2.1 - left.estimatedSpendKrw / 15000;
+      const rightRouteScore = right.score - rightDistanceKm * 2.1 - right.estimatedSpendKrw / 15000;
+      return rightRouteScore - leftRouteScore;
+    });
+
+    const next = remaining.shift();
+    if (!next) {
+      break;
+    }
+
+    ordered.push(next);
+    anchor = next.coordinates;
+  }
+
+  return ordered;
+};
+
 const chunkByDays = (places: Place[], tripDays: number) => {
-  const buckets: Place[][] = Array.from({ length: tripDays }, () => []);
-  places.forEach((place, index) => {
-    buckets[index % tripDays]?.push(place);
-  });
-  return buckets.map((bucket) => bucket.slice(0, 4));
+  const buckets: Place[][] = [];
+  const baseSize = Math.floor(places.length / tripDays);
+  const remainder = places.length % tripDays;
+  let cursor = 0;
+
+  for (let dayIndex = 0; dayIndex < tripDays; dayIndex += 1) {
+    const sliceSize = baseSize + (dayIndex < remainder ? 1 : 0);
+    buckets.push(places.slice(cursor, cursor + Math.max(1, sliceSize)));
+    cursor += Math.max(1, sliceSize);
+  }
+
+  return buckets.filter((bucket) => bucket.length > 0);
 };
 
 const dayTheme = (places: Place[]) => {
@@ -147,14 +320,14 @@ const dayTheme = (places: Place[]) => {
 
   if (hasSea) {
     return {
-      ko: "바다와 전망 루트",
+      ko: "바다와 풍경 루트",
       en: "Sea and scenic route",
     };
   }
 
   if (hasFood) {
     return {
-      ko: "로컬 감성 미식 루트",
+      ko: "로컬 미식 문화 루트",
       en: "Local food and culture route",
     };
   }
@@ -165,13 +338,20 @@ const dayTheme = (places: Place[]) => {
   };
 };
 
-const createDayStops = (places: Place[], dayIndex: number, locale: AppLocale): ItineraryStop[] => {
-  let cursor = addDays(baseDate, dayIndex);
-  cursor = addMinutes(cursor, 30);
+const createDayStops = (
+  places: Place[],
+  dayIndex: number,
+  preferences: TripPreferences,
+  locale: AppLocale
+): ItineraryStop[] => {
+  let cursor = parseISO(`${preferences.travelDate}T09:00:00+09:00`);
+  cursor = addDays(cursor, dayIndex);
 
   return places.map((place, index) => {
     const previous = places[index - 1];
-    const transit = previous ? buildTransitLeg(previous, place, locale) : undefined;
+    const transit = previous
+      ? buildTransitLeg(previous, place, locale, "fallback", preferences.mobilityMode)
+      : undefined;
 
     if (transit) {
       cursor = addMinutes(cursor, transit.durationMinutes);
@@ -189,15 +369,15 @@ const createDayStops = (places: Place[], dayIndex: number, locale: AppLocale): I
       startTime,
       endTime,
       highlight: {
-        ko: `${place.district} 대표 포인트`,
+        ko: `${place.district} 핵심 스팟`,
         en: `Key stop in ${place.district}`,
       },
       note: {
         ko: place.indoor
-          ? "날씨 변수에 강한 실내/복합 동선입니다."
-          : "현장 혼잡에 따라 체류 시간을 조금 줄여도 좋습니다.",
+          ? "날씨 변화에도 안정적으로 소화하기 좋은 실내 중심 스팟이에요."
+          : "현장 혼잡도에 따라 체류 시간을 조금 줄여도 좋아요.",
         en: place.indoor
-          ? "An indoor-friendly stop that works well in changing weather."
+          ? "An indoor-friendly stop that still works well in shifting weather."
           : "You can shorten this stop slightly if the area gets crowded.",
       },
       place,
@@ -206,63 +386,167 @@ const createDayStops = (places: Place[], dayIndex: number, locale: AppLocale): I
   });
 };
 
+const sumDayCost = (day: ItineraryDay, partySize: number) =>
+  day.stops.reduce(
+    (total, stop) =>
+      total +
+      stop.place.estimatedSpendKrw * partySize +
+      (stop.transitFromPrevious?.estimatedFareKrw ?? 0) * partySize,
+    0
+  );
+
+const buildPlanningMeta = ({
+  days,
+  preferences,
+  startArea,
+  weatherSnapshot,
+  strategy,
+}: {
+  days: ItineraryDay[];
+  preferences: TripPreferences;
+  startArea: StartArea;
+  weatherSnapshot: WeatherSnapshot;
+  strategy: "within" | "minimum";
+}) => {
+  const estimatedTotalKrw = Math.round(days.reduce((total, day) => total + sumDayCost(day, preferences.partySize), 0));
+
+  return {
+    startArea,
+    weatherSnapshot,
+    budgetSummary: buildBudgetSummary({
+      totalBudgetKrw: preferences.totalBudgetKrw,
+      estimatedTotalKrw,
+      partySize: preferences.partySize,
+      strategy:
+        strategy === "minimum" || estimatedTotalKrw > preferences.totalBudgetKrw ? "minimum" : "within",
+    }),
+  };
+};
+
+const trimRouteToBudget = ({
+  places,
+  preferences,
+  startArea,
+  locale,
+}: {
+  places: ScoredPlace[];
+  preferences: TripPreferences;
+  startArea: StartArea;
+  locale: AppLocale;
+}) => {
+  const minimumStops = minimumStopCount(preferences.tripDays, places.length);
+  let working = [...places];
+  let strategy: "within" | "minimum" = "within";
+
+  while (working.length >= minimumStops) {
+    const dayBuckets = chunkByDays(working, Math.min(preferences.tripDays, working.length));
+    const days = dayBuckets.map((bucket, index) => ({
+      dayNumber: index + 1,
+      theme: dayTheme(bucket),
+      stops: createDayStops(bucket, index, preferences, locale),
+    }));
+    const planningMeta = buildPlanningMeta({
+      days,
+      preferences,
+      startArea,
+      weatherSnapshot: neutralWeatherSnapshot(preferences.travelDate),
+      strategy,
+    });
+
+    if (planningMeta.budgetSummary.estimatedTotalKrw <= preferences.totalBudgetKrw || working.length === minimumStops) {
+      if (planningMeta.budgetSummary.estimatedTotalKrw > preferences.totalBudgetKrw) {
+        strategy = "minimum";
+      }
+
+      return { places: working, strategy };
+    }
+
+    const removable = [...working]
+      .sort((left, right) => right.estimatedSpendKrw - left.estimatedSpendKrw || left.score - right.score)
+      .shift();
+
+    if (!removable) {
+      break;
+    }
+
+    working = working.filter((place) => place.id !== removable.id);
+  }
+
+  return { places: working, strategy: "minimum" as const };
+};
+
 export const buildFallbackItinerary = (
   preferences: TripPreferences,
-  candidatePlaces = seedPlaces
+  candidatePlaces = seedPlaces,
+  planningInput?: {
+    weatherSnapshot?: WeatherSnapshot;
+    startArea?: StartArea;
+  }
 ): Itinerary => {
-  const scored = scorePlaces(preferences, candidatePlaces);
-  const selected = scored.slice(0, Math.max(4, preferences.tripDays * 3));
-  const dayBuckets = chunkByDays(selected, preferences.tripDays);
-  const locale = preferences.locale;
-
+  const normalizedPreferences = normalizeTripPreferences(preferences);
+  const locale = normalizedPreferences.locale;
+  const startArea = planningInput?.startArea ?? getStartAreaOrDefault(normalizedPreferences.startAreaId);
+  const weatherSnapshot = planningInput?.weatherSnapshot ?? neutralWeatherSnapshot(normalizedPreferences.travelDate);
+  const scored = scorePlaces(normalizedPreferences, candidatePlaces, { weatherSnapshot, startArea });
+  const budgetSelection = selectPlacesWithinBudget(scored, normalizedPreferences);
+  const orderedSelection = orderPlacesForRoute(budgetSelection.places, startArea);
+  const trimmedSelection = trimRouteToBudget({
+    places: orderedSelection,
+    preferences: normalizedPreferences,
+    startArea,
+    locale,
+  });
+  const finalStrategy =
+    budgetSelection.strategy === "minimum" || trimmedSelection.strategy === "minimum" ? "minimum" : "within";
+  const dayBuckets = chunkByDays(trimmedSelection.places, Math.min(normalizedPreferences.tripDays, trimmedSelection.places.length));
   const days: ItineraryDay[] = dayBuckets.map((bucket, index) => ({
     dayNumber: index + 1,
     theme: dayTheme(bucket),
-    stops: createDayStops(bucket, index, locale),
+    stops: createDayStops(bucket, index, normalizedPreferences, locale),
   }));
-
-  const titleAnchor = selected[0]?.name ?? { ko: "부산", en: "Busan" };
-  const title = {
-    ko: `${tText(titleAnchor, "ko")} 중심 ${preferences.tripDays}일 부산 루트`,
-    en: `${preferences.tripDays}-day Busan route around ${tText(titleAnchor, "en")}`,
-  };
-
-  const summary = {
-    ko: `${preferences.startDistrict} 출발 기준으로 이동 거리와 관심사를 반영한 개인 맞춤 일정입니다.`,
-    en: `A personalized Busan route shaped by your interests, transport preference, and a start near ${preferences.startDistrict}.`,
-  };
+  const planningMeta = buildPlanningMeta({
+    days,
+    preferences: normalizedPreferences,
+    startArea,
+    weatherSnapshot,
+    strategy: finalStrategy,
+  });
+  const titleAnchor = trimmedSelection.places[0]?.name ?? startArea.name;
 
   return {
     id: createId(),
-    syncStatus: "synced",
-    routeSlug: `busan-${preferences.startDistrict.toLowerCase().replace(/\s+/g, "-")}-${createId(6)}`,
-    title,
-    summary,
+    routeSlug: `busan-${startArea.id}-${createId(6)}`,
+    title: {
+      ko: `${tText(titleAnchor, "ko")} 중심 ${normalizedPreferences.tripDays}일 루트`,
+      en: `${normalizedPreferences.tripDays}-day Busan route around ${tText(titleAnchor, "en")}`,
+    },
+    summary: {
+      ko:
+        finalStrategy === "minimum"
+          ? `${tText(startArea.name, "ko")} 출발 기준으로 예산을 최대한 맞춘 최소 예산 루트예요.`
+          : `${tText(startArea.name, "ko")} 출발 기준으로 예산과 날씨를 함께 반영한 맞춤 루트예요.`,
+      en:
+        finalStrategy === "minimum"
+          ? `A lowest-cost Busan route built from ${tText(startArea.name, "en")} when budget is very tight.`
+          : `A personalized Busan route from ${tText(startArea.name, "en")} shaped by your budget and weather.`,
+    },
     createdAt: formatISO(new Date()),
     locale,
     source: "fallback",
     shareStatus: "private",
-    preferences,
+    syncStatus: "synced",
+    preferences: normalizedPreferences,
     days,
     ratingAverage: 4.6,
-    estimatedBudgetLabel: {
-      ko:
-        preferences.budgetLevel === "value"
-          ? "1인 4만~7만 원"
-          : preferences.budgetLevel === "premium"
-            ? "1인 12만 원 이상"
-            : "1인 7만~12만 원",
-      en:
-        preferences.budgetLevel === "value"
-          ? "KRW 40k-70k per person"
-          : preferences.budgetLevel === "premium"
-            ? "KRW 120k+ per person"
-            : "KRW 70k-120k per person",
-    },
+    estimatedBudgetLabel: makeBudgetLabel(normalizedPreferences.budgetLevel),
+    planningMeta,
   };
 };
 
-export const buildIndoorFallback = (itinerary: Itinerary, candidatePlaces = seedPlaces): Itinerary => {
+export const buildIndoorFallback = (
+  itinerary: Itinerary,
+  candidatePlaces = seedPlaces
+): Itinerary => {
   const indoorPlaces = candidatePlaces.filter((place) => place.indoor || place.accessibility);
   const preferences = {
     ...itinerary.preferences,
@@ -270,9 +554,21 @@ export const buildIndoorFallback = (itinerary: Itinerary, candidatePlaces = seed
   };
 
   return {
-    ...buildFallbackItinerary(preferences, indoorPlaces),
+    ...buildFallbackItinerary(preferences, indoorPlaces, {
+      startArea: itinerary.planningMeta?.startArea ?? startAreas[0],
+      weatherSnapshot: {
+        status: "live",
+        source: "fallback",
+        date: preferences.travelDate,
+        signal: "rainy",
+        summary: {
+          ko: "비 예보를 반영해 실내 비중을 높인 대체 경로예요.",
+          en: "An indoor-friendly reroute prepared for rainy conditions.",
+        },
+      },
+    }),
     summary: {
-      ko: "비나 혼잡을 고려해 실내 친화적으로 다시 정리한 대체 루트입니다.",
+      ko: "비나 일정 변수를 고려해 실내 위주로 다시 정리한 대체 루트예요.",
       en: "An indoor-friendly reroute prepared for rain, queues, or schedule drift.",
     },
   };

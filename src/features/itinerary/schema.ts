@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+import { startAreaIds } from "../../data/start-areas";
+import { isIsoDate } from "./planning";
+
 export const localeSchema = z.enum(["ko", "en"]);
 export const localizedTextSchema = z.object({
   ko: z.string().min(1),
@@ -8,6 +11,10 @@ export const localizedTextSchema = z.object({
 
 export const tripPreferencesSchema = z.object({
   tripDays: z.number().int().min(1).max(5),
+  totalBudgetKrw: z.number().int().min(30000),
+  partySize: z.number().int().min(1).max(12),
+  travelDate: z.string().refine(isIsoDate, "Invalid travel date"),
+  startAreaId: z.enum(startAreaIds),
   companionType: z.enum(["solo", "couple", "family", "friends"]),
   interests: z
     .array(z.enum(["food", "culture", "nature", "photospot", "shopping", "history", "night", "healing"]))
@@ -17,7 +24,6 @@ export const tripPreferencesSchema = z.object({
   accessibilityNeeds: z.boolean(),
   indoorFallback: z.boolean(),
   locale: localeSchema,
-  startDistrict: z.string().min(1),
 });
 
 const coordinatesSchema = z.object({
@@ -44,6 +50,7 @@ const placeSchema = z.object({
   popularity: z.number(),
   crowdBase: z.number(),
   priceLevel: z.enum(["value", "balanced", "premium"]),
+  estimatedSpendKrw: z.number().int().nonnegative(),
 });
 
 const navigationLinksSchema = z.object({
@@ -60,6 +67,7 @@ const transitLegSchema = z.object({
   summary: localizedTextSchema,
   durationMinutes: z.number().nonnegative(),
   distanceKm: z.number().nonnegative(),
+  estimatedFareKrw: z.number().int().nonnegative(),
   provider: z.enum(["odsay", "fallback"]),
   steps: z.array(
     z.object({
@@ -80,6 +88,40 @@ const itineraryStopSchema = z.object({
   note: localizedTextSchema,
   place: placeSchema,
   transitFromPrevious: transitLegSchema.optional(),
+});
+
+const startAreaSchema = z.object({
+  id: z.enum(startAreaIds),
+  name: localizedTextSchema,
+  district: localizedTextSchema,
+  coordinates: coordinatesSchema,
+});
+
+const weatherSnapshotSchema = z.object({
+  status: z.enum(["live", "unavailable"]),
+  source: z.enum(["open-meteo", "fallback"]),
+  date: z.string().refine(isIsoDate, "Invalid weather date"),
+  signal: z.enum(["clear", "mixed", "rainy", "heat", "cold"]),
+  summary: localizedTextSchema,
+  weatherCode: z.number().optional(),
+  temperatureMaxC: z.number().optional(),
+  temperatureMinC: z.number().optional(),
+  precipitationProbabilityMax: z.number().optional(),
+});
+
+const budgetSummarySchema = z.object({
+  totalBudgetKrw: z.number().int().nonnegative(),
+  estimatedTotalKrw: z.number().int().nonnegative(),
+  estimatedPerPersonKrw: z.number().int().nonnegative(),
+  remainingBudgetKrw: z.number().int(),
+  strategy: z.enum(["within", "minimum"]),
+  summary: localizedTextSchema,
+});
+
+const planningMetaSchema = z.object({
+  startArea: startAreaSchema,
+  weatherSnapshot: weatherSnapshotSchema,
+  budgetSummary: budgetSummarySchema,
 });
 
 export const itinerarySchema = z.object({
@@ -103,4 +145,5 @@ export const itinerarySchema = z.object({
   ),
   ratingAverage: z.number(),
   estimatedBudgetLabel: localizedTextSchema,
+  planningMeta: planningMetaSchema,
 });

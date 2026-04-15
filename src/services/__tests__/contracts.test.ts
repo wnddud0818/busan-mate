@@ -11,6 +11,10 @@ describe("backend contracts", () => {
       join(process.cwd(), "supabase", "migrations", "20260415170000_remote_sync.sql"),
       "utf-8"
     );
+    const planningMetaMigration = readFileSync(
+      join(process.cwd(), "supabase", "migrations", "20260415183000_itinerary_planning_meta.sql"),
+      "utf-8"
+    );
     const functionConfig = readFileSync(join(process.cwd(), "supabase", "config.toml"), "utf-8");
 
     expect(initMigration).toContain('create policy "itineraries_owner_select"');
@@ -22,6 +26,7 @@ describe("backend contracts", () => {
     expect(remoteSyncMigration).toContain('create policy "profiles_owner_insert"');
     expect(remoteSyncMigration).toContain('create policy "trip_sessions_owner_update"');
     expect(remoteSyncMigration).toContain('create policy "chat_messages_owner_insert"');
+    expect(planningMetaMigration).toContain("add column if not exists planning_meta jsonb");
 
     expect(functionConfig).toContain("[functions.publish-itinerary]");
     expect(functionConfig).toContain("[functions.answer-guide]");

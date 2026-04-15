@@ -1,5 +1,6 @@
 import { formatISO } from "date-fns";
 
+import { estimatedSpendFromPriceLevel } from "../features/itinerary/planning";
 import {
   BookingLink,
   Itinerary,
@@ -33,6 +34,7 @@ export const seedPlaces: Place[] = [
     popularity: 88,
     crowdBase: 72,
     priceLevel: "value",
+    estimatedSpendKrw: estimatedSpendFromPriceLevel("value", ["culture", "photospot", "history"]),
   },
   {
     id: "haeundae",
@@ -55,6 +57,7 @@ export const seedPlaces: Place[] = [
     popularity: 96,
     crowdBase: 91,
     priceLevel: "balanced",
+    estimatedSpendKrw: estimatedSpendFromPriceLevel("balanced", ["nature", "photospot", "night"]),
   },
   {
     id: "gwangalli",
@@ -77,6 +80,7 @@ export const seedPlaces: Place[] = [
     popularity: 93,
     crowdBase: 87,
     priceLevel: "balanced",
+    estimatedSpendKrw: estimatedSpendFromPriceLevel("balanced", ["night", "photospot", "food"]),
   },
   {
     id: "huinnyeoul",
@@ -99,6 +103,7 @@ export const seedPlaces: Place[] = [
     popularity: 84,
     crowdBase: 62,
     priceLevel: "balanced",
+    estimatedSpendKrw: estimatedSpendFromPriceLevel("balanced", ["culture", "healing", "photospot"]),
   },
   {
     id: "jagalchi",
@@ -121,6 +126,7 @@ export const seedPlaces: Place[] = [
     popularity: 90,
     crowdBase: 84,
     priceLevel: "balanced",
+    estimatedSpendKrw: estimatedSpendFromPriceLevel("balanced", ["food", "history", "culture"]),
   },
   {
     id: "cinema-center",
@@ -143,6 +149,7 @@ export const seedPlaces: Place[] = [
     popularity: 79,
     crowdBase: 51,
     priceLevel: "balanced",
+    estimatedSpendKrw: estimatedSpendFromPriceLevel("balanced", ["culture", "healing", "night"]),
   },
   {
     id: "museum-of-contemporary",
@@ -165,6 +172,7 @@ export const seedPlaces: Place[] = [
     popularity: 68,
     crowdBase: 36,
     priceLevel: "value",
+    estimatedSpendKrw: estimatedSpendFromPriceLevel("value", ["culture", "healing", "history"]),
   },
   {
     id: "haedong",
@@ -187,6 +195,7 @@ export const seedPlaces: Place[] = [
     popularity: 91,
     crowdBase: 78,
     priceLevel: "balanced",
+    estimatedSpendKrw: estimatedSpendFromPriceLevel("balanced", ["history", "nature", "photospot"]),
   },
   {
     id: "songdo",
@@ -211,6 +220,7 @@ export const seedPlaces: Place[] = [
     popularity: 83,
     crowdBase: 66,
     priceLevel: "balanced",
+    estimatedSpendKrw: estimatedSpendFromPriceLevel("balanced", ["nature", "photospot", "healing"]),
   },
 ];
 

@@ -25,13 +25,14 @@ type ItineraryPayload = {
   locale: "ko" | "en";
   title: LocalizedText;
   summary: LocalizedText;
-  preferences: {
+  preferences: Record<string, unknown> & {
     interests: string[];
   };
   source: "ai" | "fallback";
   shareStatus: "private" | "published";
   ratingAverage: number;
   estimatedBudgetLabel: LocalizedText;
+  planningMeta?: Record<string, unknown>;
   createdAt: string;
   days: ItineraryDay[];
 };
@@ -72,6 +73,7 @@ export const upsertItineraryGraph = async ({
         share_status: shareStatus,
         rating_average: itinerary.ratingAverage,
         estimated_budget_label: itinerary.estimatedBudgetLabel,
+        planning_meta: itinerary.planningMeta ?? null,
         created_at: itinerary.createdAt,
       },
       {

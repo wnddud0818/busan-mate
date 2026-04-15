@@ -3,6 +3,8 @@ export type AppLocale = "ko" | "en";
 export type CompanionType = "solo" | "couple" | "family" | "friends";
 export type BudgetLevel = "value" | "balanced" | "premium";
 export type MobilityMode = "transit" | "walk" | "mixed";
+export type StartAreaId = "seomyeon" | "haeundae" | "gwangalli" | "nampo" | "busan-station";
+export type WeatherRouteSignal = "clear" | "mixed" | "rainy" | "heat" | "cold";
 export type InterestTag =
   | "food"
   | "culture"
@@ -25,6 +27,40 @@ export interface Coordinates {
   longitude: number;
 }
 
+export interface StartArea {
+  id: StartAreaId;
+  name: LocalizedText;
+  district: LocalizedText;
+  coordinates: Coordinates;
+}
+
+export interface WeatherSnapshot {
+  status: "live" | "unavailable";
+  source: "open-meteo" | "fallback";
+  date: string;
+  signal: WeatherRouteSignal;
+  summary: LocalizedText;
+  weatherCode?: number;
+  temperatureMaxC?: number;
+  temperatureMinC?: number;
+  precipitationProbabilityMax?: number;
+}
+
+export interface BudgetSummary {
+  totalBudgetKrw: number;
+  estimatedTotalKrw: number;
+  estimatedPerPersonKrw: number;
+  remainingBudgetKrw: number;
+  strategy: "within" | "minimum";
+  summary: LocalizedText;
+}
+
+export interface PlanningMeta {
+  startArea: StartArea;
+  weatherSnapshot: WeatherSnapshot;
+  budgetSummary: BudgetSummary;
+}
+
 export interface Place {
   id: string;
   slug: string;
@@ -42,6 +78,7 @@ export interface Place {
   popularity: number;
   crowdBase: number;
   priceLevel: BudgetLevel;
+  estimatedSpendKrw: number;
 }
 
 export interface RouteStep {
@@ -63,6 +100,7 @@ export interface TransitLeg {
   summary: LocalizedText;
   durationMinutes: number;
   distanceKm: number;
+  estimatedFareKrw: number;
   provider: "odsay" | "fallback";
   steps: RouteStep[];
   navigationLinks: NavigationLinks;
@@ -88,6 +126,10 @@ export interface ItineraryDay {
 
 export interface TripPreferences {
   tripDays: number;
+  totalBudgetKrw: number;
+  partySize: number;
+  travelDate: string;
+  startAreaId: StartAreaId;
   companionType: CompanionType;
   interests: InterestTag[];
   budgetLevel: BudgetLevel;
@@ -95,7 +137,6 @@ export interface TripPreferences {
   accessibilityNeeds: boolean;
   indoorFallback: boolean;
   locale: AppLocale;
-  startDistrict: string;
 }
 
 export interface Itinerary {
@@ -113,6 +154,7 @@ export interface Itinerary {
   days: ItineraryDay[];
   ratingAverage: number;
   estimatedBudgetLabel: LocalizedText;
+  planningMeta: PlanningMeta;
 }
 
 export interface TripSession {

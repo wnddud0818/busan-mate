@@ -4,6 +4,10 @@ import { buildFallbackItinerary, scorePlaces, validateStructuredItinerary } from
 
 const preferences: TripPreferences = {
   tripDays: 2,
+  totalBudgetKrw: 240000,
+  partySize: 2,
+  travelDate: "2026-04-16",
+  startAreaId: "seomyeon",
   companionType: "friends",
   interests: ["food", "culture", "night"],
   budgetLevel: "balanced",
@@ -11,7 +15,6 @@ const preferences: TripPreferences = {
   accessibilityNeeds: false,
   indoorFallback: true,
   locale: "ko",
-  startDistrict: "Seomyeon",
 };
 
 describe("planner", () => {
@@ -25,5 +28,46 @@ describe("planner", () => {
     const result = validateStructuredItinerary(itinerary);
     expect(result.success).toBe(true);
     expect(itinerary.days).toHaveLength(2);
+  });
+
+  it("keeps the generated route within the total budget when possible", () => {
+    const itinerary = buildFallbackItinerary(preferences, seedPlaces);
+    expect(itinerary.planningMeta.budgetSummary.estimatedTotalKrw).toBeLessThanOrEqual(
+      preferences.totalBudgetKrw
+    );
+  });
+
+  it("increases estimated total cost when party size grows", () => {
+    const itineraryForTwo = buildFallbackItinerary(preferences, seedPlaces);
+    const itineraryForFour = buildFallbackItinerary(
+      {
+        ...preferences,
+        partySize: 4,
+        totalBudgetKrw: 480000,
+      },
+      seedPlaces
+    );
+
+    expect(itineraryForFour.planningMeta.budgetSummary.estimatedTotalKrw).toBeGreaterThan(
+      itineraryForTwo.planningMeta.budgetSummary.estimatedTotalKrw
+    );
+  });
+
+  it("favors indoor places when rain is expected", () => {
+    const rainy = buildFallbackItinerary(preferences, seedPlaces, {
+      weatherSnapshot: {
+        status: "live",
+        source: "open-meteo",
+        date: preferences.travelDate,
+        signal: "rainy",
+        summary: {
+          ko: "비 예보로 실내 비중을 높였어요.",
+          en: "Rain is expected, so we shifted the route indoors.",
+        },
+      },
+    });
+
+    const indoorStops = rainy.days.flatMap((day) => day.stops).filter((stop) => stop.place.indoor);
+    expect(indoorStops.length).toBeGreaterThan(0);
   });
 });

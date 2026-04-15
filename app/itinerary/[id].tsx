@@ -18,6 +18,7 @@ import { rateItinerary } from "../../src/services/rating-service";
 import { syncLiveSession } from "../../src/services/session-service";
 import { useAppStore } from "../../src/stores/app-store";
 import { colors, radii, spacing } from "../../src/theme/tokens";
+import { formatKrwCompact, formatKrwFull } from "../../src/utils/currency";
 
 export default function ItineraryDetailPage() {
   const params = useLocalSearchParams<{ id: string }>();
@@ -48,8 +49,8 @@ export default function ItineraryDetailPage() {
     onSuccess: (result) => {
       if (result.upgradeRequired) {
         Alert.alert(
-          locale === "ko" ? "濡쒓렇???낃렇?덉씠???꾩슂" : "Upgrade required",
-          locale === "ko" ? "?대찓??留곹겕濡?濡쒓렇?명븯硫?怨듭쑀?????덉뼱??" : "Use a magic link before publishing."
+          locale === "ko" ? "업그레이드 필요" : "Upgrade required",
+          locale === "ko" ? "공유하려면 매직 링크 로그인으로 전환해 주세요." : "Use a magic link before publishing."
         );
         return;
       }
@@ -61,7 +62,7 @@ export default function ItineraryDetailPage() {
         Alert.alert(
           "Busan Mate",
           locale === "ko"
-            ? "원격 저장에 실패해 로컬 임시 상태로 보관했어요."
+            ? "원격 저장에 실패해 우선 로컬에만 저장해 두었어요."
             : "Remote sync failed, so this route is saved locally for now."
         );
       }
@@ -127,9 +128,37 @@ export default function ItineraryDetailPage() {
   return (
     <Screen title={itinerary.title[locale]} subtitle={itinerary.summary[locale]}>
       <SectionCard>
-        <Text style={styles.metric}>{itinerary.estimatedBudgetLabel[locale]}</Text>
+        <Text style={styles.metric}>
+          {itinerary.planningMeta
+            ? itinerary.planningMeta.budgetSummary.summary[locale]
+            : itinerary.estimatedBudgetLabel[locale]}
+        </Text>
+        {itinerary.planningMeta ? (
+          <View style={styles.metaStack}>
+            <Text style={styles.metaCopy}>
+              {locale === "ko"
+                ? `예상 총액 ${formatKrwFull(itinerary.planningMeta.budgetSummary.estimatedTotalKrw, locale)} / 1인 ${formatKrwCompact(
+                    itinerary.planningMeta.budgetSummary.estimatedPerPersonKrw,
+                    locale
+                  )}`
+                : `Estimated total ${formatKrwFull(itinerary.planningMeta.budgetSummary.estimatedTotalKrw, locale)} / ${formatKrwCompact(
+                    itinerary.planningMeta.budgetSummary.estimatedPerPersonKrw,
+                    locale
+                  )} per traveler`}
+            </Text>
+            <Text style={styles.metaCopy}>{itinerary.planningMeta.weatherSnapshot.summary[locale]}</Text>
+            <Text style={styles.metaCopy}>
+              {locale === "ko"
+                ? `${itinerary.planningMeta.startArea.name.ko} 출발 기준`
+                : `Starting near ${itinerary.planningMeta.startArea.name.en}`}
+            </Text>
+          </View>
+        ) : null}
         <View style={styles.actionRow}>
-          <Pressable style={styles.primaryButton} onPress={() => launchSession({ askPermission: true, destination: "live" })}>
+          <Pressable
+            style={styles.primaryButton}
+            onPress={() => launchSession({ askPermission: true, destination: "live" })}
+          >
             <Text style={styles.primaryButtonText}>{t("itinerary.startGuide")}</Text>
           </Pressable>
           <Pressable style={styles.secondaryButton} onPress={() => publishMutation.mutate()}>
@@ -139,7 +168,10 @@ export default function ItineraryDetailPage() {
           </Pressable>
         </View>
         <View style={styles.actionRow}>
-          <Pressable style={styles.inlineButton} onPress={() => launchSession({ askPermission: false, destination: "guide" })}>
+          <Pressable
+            style={styles.inlineButton}
+            onPress={() => launchSession({ askPermission: false, destination: "guide" })}
+          >
             <Text style={styles.inlineButtonText}>{t("itinerary.askGuide")}</Text>
           </Pressable>
           <Pressable style={styles.inlineButton} onPress={() => ratingMutation.mutate()}>
@@ -185,6 +217,14 @@ const styles = StyleSheet.create({
     color: colors.sand,
     fontSize: 16,
     fontWeight: "800",
+  },
+  metaStack: {
+    gap: 4,
+  },
+  metaCopy: {
+    color: "rgba(248,251,253,0.72)",
+    fontSize: 13,
+    lineHeight: 19,
   },
   actionRow: {
     flexDirection: "row",
