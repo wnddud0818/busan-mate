@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { radii, spacing } from "../../theme/tokens";
 import { useColors } from "../../theme/use-colors";
-import { ItineraryStop, RouteStep } from "../../types/domain";
+import { CrowdForecastLevel, ItineraryStop, RouteStep, StopCrowdForecast } from "../../types/domain";
 import { formatKrwFull } from "../../utils/currency";
 import { tText } from "../../utils/localized";
 import { clockLabel } from "../../utils/time";
@@ -31,20 +31,57 @@ const transitModeLabel = (mode: RouteStep["mode"], locale: "ko" | "en") => {
   }
 };
 
+const crowdLevelLabel = (level: CrowdForecastLevel, locale: "ko" | "en") => {
+  switch (level) {
+    case "low":
+      return locale === "ko" ? "\uD63C\uC7A1 \uB0AE\uC74C" : "Low crowd";
+    case "high":
+      return locale === "ko" ? "\uD63C\uC7A1 \uB192\uC74C" : "High crowd";
+    default:
+      return locale === "ko" ? "\uD63C\uC7A1 \uBCF4\uD1B5" : "Moderate crowd";
+  }
+};
+
+const crowdTone = (level: CrowdForecastLevel, colors: ReturnType<typeof useColors>) => {
+  switch (level) {
+    case "low":
+      return {
+        backgroundColor: colors.mintLight,
+        borderColor: colors.mintBorder,
+        accent: colors.mint,
+      };
+    case "high":
+      return {
+        backgroundColor: colors.coralLight,
+        borderColor: colors.coralBorder,
+        accent: colors.coral,
+      };
+    default:
+      return {
+        backgroundColor: colors.sandLight,
+        borderColor: colors.lineBright,
+        accent: colors.sand,
+      };
+  }
+};
+
 export const StopCard = ({
   stop,
+  crowdForecast,
   locale,
   onOpenGoogleMaps,
   onOpenNaverMap,
   onBooking,
 }: {
   stop: ItineraryStop;
+  crowdForecast?: StopCrowdForecast | null;
   locale: "ko" | "en";
   onOpenGoogleMaps: () => void;
   onOpenNaverMap: () => void;
   onBooking?: () => void;
 }) => {
   const colors = useColors();
+  const crowdStyles = crowdForecast ? crowdTone(crowdForecast.level, colors) : null;
 
   return (
     <View style={styles.container}>
@@ -69,6 +106,44 @@ export const StopCard = ({
         ) : null}
 
         <Text style={[styles.description, { color: colors.mist }]}>{tText(stop.place.description, locale)}</Text>
+
+        {crowdForecast ? (
+          <View
+            style={[
+              styles.crowdCard,
+              {
+                backgroundColor: crowdStyles?.backgroundColor,
+                borderColor: crowdStyles?.borderColor,
+              },
+            ]}
+          >
+            <View style={styles.crowdHeader}>
+              <View style={styles.crowdHeaderLabel}>
+                <Feather name="users" size={12} color={crowdStyles?.accent} />
+                <Text style={[styles.crowdTitle, { color: crowdStyles?.accent }]}>
+                  {crowdLevelLabel(crowdForecast.level, locale)}
+                </Text>
+              </View>
+              <Text style={[styles.crowdScore, { color: crowdStyles?.accent }]}>
+                {crowdForecast.rate.toFixed(1)}/100
+              </Text>
+            </View>
+            <Text style={[styles.crowdDetail, { color: colors.mist }]}>
+              {locale === "ko"
+                ? `${crowdForecast.matchedAttractionName} \uAE30\uC900 \uC608\uCE21`
+                : `Matched with ${crowdForecast.matchedAttractionName}`}
+            </Text>
+          </View>
+        ) : crowdForecast === null ? (
+          <View style={[styles.crowdCard, { backgroundColor: colors.glass, borderColor: colors.line }]}>
+            <View style={styles.crowdHeaderLabel}>
+              <Feather name="users" size={12} color={colors.mist} />
+              <Text style={[styles.crowdFallbackText, { color: colors.mist }]}>
+                {locale === "ko" ? "\uD63C\uC7A1 \uC608\uCE21 \uC815\uBCF4 \uC5C6\uC74C" : "No crowd forecast"}
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         {stop.transitFromPrevious ? (
           <View style={styles.transitBlock}>
@@ -210,6 +285,41 @@ const styles = StyleSheet.create({
   description: {
     fontSize: 13,
     lineHeight: 20,
+  },
+  crowdCard: {
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    gap: 4,
+  },
+  crowdHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  crowdHeaderLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+  },
+  crowdTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  crowdScore: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  crowdDetail: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  crowdFallbackText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
   transitBlock: {
     gap: 8,

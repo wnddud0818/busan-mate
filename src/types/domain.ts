@@ -184,6 +184,33 @@ export interface TransitLeg {
   navigationLinks: NavigationLinks;
 }
 
+export type CrowdForecastLevel = "low" | "moderate" | "high";
+
+export interface StopCrowdForecast {
+  stopId: string;
+  stopDate: string;
+  placeId: string;
+  placeName: LocalizedText;
+  matchedAttractionName: string;
+  districtCode: string;
+  districtName: string;
+  rate: number;
+  level: CrowdForecastLevel;
+  source: "visit-korea";
+}
+
+export interface ItineraryCrowdForecast {
+  source: "visit-korea";
+  totalStopCount: number;
+  matchedStopCount: number;
+  unavailableStopCount: number;
+  averageRate?: number;
+  busiestStop?: StopCrowdForecast;
+  calmestStop?: StopCrowdForecast;
+  levelCounts: Record<CrowdForecastLevel, number>;
+  stops: StopCrowdForecast[];
+}
+
 export interface ItineraryStop {
   id: string;
   order: number;

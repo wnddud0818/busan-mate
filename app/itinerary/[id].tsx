@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Feather } from "@expo/vector-icons";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
@@ -10,6 +10,7 @@ import { Screen } from "../../src/components/common/screen";
 import { SectionCard } from "../../src/components/common/section-card";
 import { StopCard } from "../../src/components/itinerary/stop-card";
 import { sendMagicLink } from "../../src/services/auth-service";
+import { loadItineraryCrowdForecast } from "../../src/services/crowd-service";
 import {
   openNavigationLink,
   requestLiveGuidePermissions,
@@ -21,7 +22,7 @@ import { syncLiveSession } from "../../src/services/session-service";
 import { useAppStore } from "../../src/stores/app-store";
 import { radii, spacing } from "../../src/theme/tokens";
 import { useColors } from "../../src/theme/use-colors";
-import { AppLocale, PlannerCandidateDebug } from "../../src/types/domain";
+import { AppLocale, CrowdForecastLevel, PlannerCandidateDebug } from "../../src/types/domain";
 import { formatKrwCompact, formatKrwFull } from "../../src/utils/currency";
 import { buildNavigationLinks } from "../../src/utils/maps";
 
@@ -65,6 +66,17 @@ const selectionStageLabel = (stage: string, locale: AppLocale) => {
 
 const yesNoLabel = (value: boolean, locale: AppLocale) =>
   value ? (locale === "ko" ? "예" : "Yes") : locale === "ko" ? "아니오" : "No";
+
+const crowdLevelLabel = (level: CrowdForecastLevel, locale: AppLocale) => {
+  switch (level) {
+    case "low":
+      return locale === "ko" ? "\uB0AE\uC74C" : "Low";
+    case "high":
+      return locale === "ko" ? "\uB192\uC74C" : "High";
+    default:
+      return locale === "ko" ? "\uBCF4\uD1B5" : "Moderate";
+  }
+};
 
 const scoreLabelMap: Record<string, { ko: string; en: string }> = {
   interest: { ko: "관심사", en: "interest" },
@@ -122,6 +134,10 @@ export default function ItineraryDetailPage() {
   const { t } = useTranslation();
   const [showRawDebug, setShowRawDebug] = useState(false);
   const [showAllDroppedCandidates, setShowAllDroppedCandidates] = useState(false);
+  const crowdStopsSignature =
+    itinerary?.days
+      .flatMap((day) => day.stops.map((stop) => `${stop.id}:${stop.place.id}:${stop.date}`))
+      .join("|") ?? "";
 
   const publishMutation = useMutation({
     mutationFn: async () => {
@@ -161,6 +177,16 @@ export default function ItineraryDetailPage() {
       if (result.shared) upsertSharedItinerary(result.shared);
     },
   });
+  const crowdForecastQuery = useQuery({
+    queryKey: ["itinerary-crowd-forecast", itinerary?.id ?? "missing", crowdStopsSignature],
+    queryFn: () => loadItineraryCrowdForecast({ stops: itinerary?.days.flatMap((day) => day.stops) ?? [] }),
+    enabled: Boolean(itinerary),
+    staleTime: 1000 * 60 * 15,
+  });
+  const crowdForecastByStopId = useMemo(
+    () => new Map((crowdForecastQuery.data?.stops ?? []).map((item) => [item.stopId, item])),
+    [crowdForecastQuery.data?.stops]
+  );
 
   if (!itinerary) {
     return (
@@ -225,6 +251,7 @@ export default function ItineraryDetailPage() {
             "visit-korea.searchStay2",
             "visit-korea.detailInfo2",
             "visit-korea.detailIntro2",
+            "visit-korea.tatsCnctrRatedList",
             "odsay.searchPubTransPathT",
             "get-transit-route",
           ].includes(log.label)
@@ -232,6 +259,7 @@ export default function ItineraryDetailPage() {
         .slice(0, 12),
     [debugLogs]
   );
+  const crowdForecast = crowdForecastQuery.data;
   const weatherParts = [
     planningDebug?.weatherValues.signal,
     planningDebug?.weatherValues.temperatureMaxC != null && planningDebug?.weatherValues.temperatureMinC != null
@@ -335,6 +363,84 @@ export default function ItineraryDetailPage() {
             </Text>
           </Pressable>
         </View>
+      </SectionCard>
+
+      <SectionCard
+        title={locale === "ko" ? "\uD63C\uC7A1 \uC608\uCE21" : "Crowd forecast"}
+        hint={
+          locale === "ko"
+            ? "VisitKorea \uAD00\uAD11\uC9C0 \uC9D1\uC911\uB960 \uC608\uCE21 \uB370\uC774\uD130\uB97C \uC77C\uC815 \uACB0\uACFC\uC5D0 \uAC19\uC774 \uBCF4\uC5EC\uC918\uC694."
+            : "Shows VisitKorea crowd forecast data alongside the itinerary."
+        }
+      >
+        {crowdForecastQuery.isLoading ? (
+          <Text style={[styles.compactCopy, { color: colors.mist }]}>
+            {locale === "ko"
+              ? "\uD63C\uC7A1 \uC608\uCE21 \uC815\uBCF4\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4."
+              : "Loading crowd forecast data."}
+          </Text>
+        ) : crowdForecast && crowdForecast.matchedStopCount > 0 ? (
+          <>
+            <View style={styles.statGrid}>
+              <DecisionStat
+                label={locale === "ko" ? "\uB370\uC774\uD130 \uCEE4\uBC84\uB9AC\uC9C0" : "Coverage"}
+                value={`${crowdForecast.matchedStopCount} / ${crowdForecast.totalStopCount}`}
+                colors={colors}
+              />
+              <DecisionStat
+                label={locale === "ko" ? "\uD3C9\uADE0 \uC9D1\uC911\uB960" : "Average rate"}
+                value={`${crowdForecast.averageRate?.toFixed(1) ?? "-"} / 100`}
+                colors={colors}
+              />
+              <DecisionStat
+                label={locale === "ko" ? "\uAC00\uC7A5 \uBD90\uBE44\uB294 \uC7A5\uC18C" : "Busiest stop"}
+                value={crowdForecast.busiestStop?.placeName[locale] ?? "-"}
+                colors={colors}
+              />
+              <DecisionStat
+                label={locale === "ko" ? "\uAC00\uC7A5 \uC5EC\uC720 \uC788\uB294 \uC7A5\uC18C" : "Calmest stop"}
+                value={crowdForecast.calmestStop?.placeName[locale] ?? "-"}
+                colors={colors}
+              />
+            </View>
+
+            <View style={[styles.processCard, { backgroundColor: colors.glass, borderColor: colors.line }]}>
+              <Text style={[styles.processTitle, { color: colors.cloud }]}>
+                {locale === "ko" ? "\uC608\uCE21 \uC694\uC57D" : "Forecast summary"}
+              </Text>
+              <Text style={[styles.processLine, { color: colors.mist }]}>
+                {locale === "ko"
+                  ? `\uB192\uC74C ${crowdForecast.levelCounts.high}\uACF3 / \uBCF4\uD1B5 ${crowdForecast.levelCounts.moderate}\uACF3 / \uB0AE\uC74C ${crowdForecast.levelCounts.low}\uACF3`
+                  : `${crowdForecast.levelCounts.high} high / ${crowdForecast.levelCounts.moderate} moderate / ${crowdForecast.levelCounts.low} low`}
+              </Text>
+              <Text style={[styles.processLine, { color: colors.mist }]}>
+                {locale === "ko"
+                  ? `${crowdForecast.matchedStopCount}\uAC1C \uC7A5\uC18C\uB294 \uC9C1\uC811 \uB9E4\uCE6D\uB418\uC5C8\uACE0 ${crowdForecast.unavailableStopCount}\uAC1C\uB294 \uC544\uC9C1 \uC608\uCE21 \uB370\uC774\uD130\uAC00 \uC5C6\uC5B4\uC694.`
+                  : `${crowdForecast.matchedStopCount} stops matched directly, and ${crowdForecast.unavailableStopCount} have no linked forecast yet.`}
+              </Text>
+              {crowdForecast.busiestStop ? (
+                <Text style={[styles.processLine, { color: colors.mist }]}>
+                  {locale === "ko"
+                    ? `\uCD5C\uACE0 \uD63C\uC7A1 \uAE30\uC900\uBA85: ${crowdForecast.busiestStop.matchedAttractionName} (${crowdLevelLabel(crowdForecast.busiestStop.level, locale)} ${crowdForecast.busiestStop.rate.toFixed(1)}/100)`
+                    : `Highest matched signal: ${crowdForecast.busiestStop.matchedAttractionName} (${crowdLevelLabel(crowdForecast.busiestStop.level, locale)} ${crowdForecast.busiestStop.rate.toFixed(1)}/100)`}
+                </Text>
+              ) : null}
+            </View>
+          </>
+        ) : (
+          <View style={[styles.processCard, { backgroundColor: colors.glass, borderColor: colors.line }]}>
+            <Text style={[styles.processTitle, { color: colors.cloud }]}>
+              {locale === "ko"
+                ? "\uC9C1\uC811 \uB9E4\uCE6D\uB41C \uD63C\uC7A1 \uC815\uBCF4\uAC00 \uC544\uC9C1 \uC5C6\uC5B4\uC694."
+                : "No direct crowd matches yet."}
+            </Text>
+            <Text style={[styles.processLine, { color: colors.mist }]}>
+              {locale === "ko"
+                ? "\uC774\uBC88 \uC77C\uC815 \uC7A5\uC18C\uB294 VisitKorea \uC9D1\uC911\uB960 \uB370\uC774\uD130\uC640 \uBC14\uB85C \uC5F0\uACB0\uB418\uC9C0 \uC54A\uC558\uC5B4\uC694."
+                : "This itinerary's stops do not have a direct VisitKorea crowd forecast match yet."}
+            </Text>
+          </View>
+        )}
       </SectionCard>
 
       {planningDebug ? (
@@ -637,6 +743,11 @@ export default function ItineraryDetailPage() {
               <StopCard
                 key={stop.id}
                 stop={stop}
+                crowdForecast={
+                  crowdForecastQuery.isSuccess && (crowdForecast?.matchedStopCount ?? 0) > 0
+                    ? crowdForecastByStopId.get(stop.id) ?? null
+                    : undefined
+                }
                 locale={locale}
                 onOpenGoogleMaps={() => openNavigationLink(navigationLinks.googleMaps)}
                 onOpenNaverMap={() => openNavigationLink(navigationLinks.naverMap)}
