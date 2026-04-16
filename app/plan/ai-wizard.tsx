@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { useMutation } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -41,6 +41,7 @@ export default function AiWizardScreen() {
   const copy = screenCopy[locale];
 
   const headerIntro = useRef(new Animated.Value(0)).current;
+  const [submittedPreferences, setSubmittedPreferences] = useState<TripPreferences | null>(null);
 
   useEffect(() => {
     headerIntro.setValue(0);
@@ -74,6 +75,7 @@ export default function AiWizardScreen() {
 
   const handleSubmit = useCallback(
     (values: TripPreferences) => {
+      setSubmittedPreferences(values);
       itineraryMutation.mutate(values);
     },
     [itineraryMutation]
@@ -112,7 +114,11 @@ export default function AiWizardScreen() {
         </View>
 
         {itineraryMutation.isPending ? (
-          <LoadingAnimation locale={locale} title={copy.loadingTitle} />
+          <LoadingAnimation
+            locale={locale}
+            title={copy.loadingTitle}
+            preferences={submittedPreferences}
+          />
         ) : (
           <ScrollView
             showsVerticalScrollIndicator={false}

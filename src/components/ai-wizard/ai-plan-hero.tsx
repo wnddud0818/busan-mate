@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
@@ -41,6 +42,16 @@ export const AiPlanHero = ({ locale, onPress }: AiPlanHeroProps) => {
   const launchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
 
+  const resetLaunchState = useCallback(() => {
+    if (launchTimer.current) {
+      clearTimeout(launchTimer.current);
+      launchTimer.current = null;
+    }
+    launch.stopAnimation();
+    launch.setValue(0);
+    setIsLaunching(false);
+  }, [launch]);
+
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
@@ -64,17 +75,23 @@ export const AiPlanHero = ({ locale, onPress }: AiPlanHeroProps) => {
     };
   }, [pulse]);
 
-  useEffect(() => {
-    return () => {
-      if (launchTimer.current) {
-        clearTimeout(launchTimer.current);
-      }
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      resetLaunchState();
+
+      return () => {
+        if (launchTimer.current) {
+          clearTimeout(launchTimer.current);
+          launchTimer.current = null;
+        }
+      };
+    }, [resetLaunchState])
+  );
 
   const handlePress = useCallback(() => {
     if (isLaunching) return;
 
+    launch.setValue(0);
     setIsLaunching(true);
     Animated.timing(launch, {
       toValue: 1,
@@ -84,6 +101,7 @@ export const AiPlanHero = ({ locale, onPress }: AiPlanHeroProps) => {
     }).start();
 
     launchTimer.current = setTimeout(() => {
+      launchTimer.current = null;
       onPress();
     }, 260);
   }, [isLaunching, launch, onPress]);
