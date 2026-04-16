@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DebugPanel } from "./debug-panel";
+import { RouteScoreInfoCard } from "./route-score-info-card";
 import { useAppStore } from "../../stores/app-store";
 import { radii, spacing } from "../../theme/tokens";
 import { useColors, useGradient } from "../../theme/use-colors";
@@ -42,9 +43,13 @@ export const Screen = ({ title, subtitle, children, scroll = true, showBack = fa
           {showBack ? (
             <Pressable style={styles.backButton} onPress={() => router.back()}>
               <Feather name="arrow-left" size={20} color={colors.cloud} />
-              <Text style={[styles.backLabel, { color: colors.cloud }]}>뒤로</Text>
+              <Text style={[styles.backLabel, { color: colors.cloud }]}>
+                {locale === "ko" ? "뒤로" : "Back"}
+              </Text>
             </Pressable>
-          ) : <View />}
+          ) : (
+            <View />
+          )}
           <Pressable
             style={[
               styles.themeToggle,
@@ -53,13 +58,9 @@ export const Screen = ({ title, subtitle, children, scroll = true, showBack = fa
                 borderColor: settingsOpen ? colors.coral : colors.lineBright,
               },
             ]}
-            onPress={() => setSettingsOpen((v) => !v)}
+            onPress={() => setSettingsOpen((value) => !value)}
           >
-            <Feather
-              name="settings"
-              size={15}
-              color={settingsOpen ? colors.navy : colors.cloud}
-            />
+            <Feather name="settings" size={15} color={settingsOpen ? colors.navy : colors.cloud} />
           </Pressable>
         </View>
         <Text style={[styles.title, { color: colors.cloud }]}>{title}</Text>
@@ -88,7 +89,6 @@ export const Screen = ({ title, subtitle, children, scroll = true, showBack = fa
         </SafeAreaView>
       </LinearGradient>
 
-      {/* ── 설정 모달 ── */}
       <Modal
         visible={settingsOpen}
         transparent
@@ -99,7 +99,6 @@ export const Screen = ({ title, subtitle, children, scroll = true, showBack = fa
           <View style={styles.backdrop}>
             <TouchableWithoutFeedback>
               <View style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.lineBright }]}>
-                {/* 헤더 */}
                 <View style={styles.sheetHeader}>
                   <Text style={[styles.sheetTitle, { color: colors.cloud }]}>
                     {locale === "ko" ? "설정" : "Settings"}
@@ -112,73 +111,83 @@ export const Screen = ({ title, subtitle, children, scroll = true, showBack = fa
                   </Pressable>
                 </View>
 
-                {/* 언어 */}
-                <View style={styles.section}>
-                  <Text style={[styles.sectionLabel, { color: colors.mist }]}>
-                    {locale === "ko" ? "언어" : "Language"}
-                  </Text>
-                  <View style={styles.optionRow}>
-                    {(["ko", "en"] as const).map((lang) => {
-                      const selected = locale === lang;
-                      return (
-                        <Pressable
-                          key={lang}
-                          style={[
-                            styles.optionBtn,
-                            {
-                              backgroundColor: selected ? colors.coral : colors.glass,
-                              borderColor: selected ? colors.coral : colors.line,
-                            },
-                          ]}
-                          onPress={() => setLocale(lang)}
-                        >
-                          <Text style={styles.optionFlag}>{lang === "ko" ? "🇰🇷" : "🇺🇸"}</Text>
-                          <Text style={[styles.optionLabel, { color: selected ? colors.navy : colors.cloud }]}>
-                            {lang === "ko" ? "한국어" : "English"}
-                          </Text>
-                          {selected ? <Feather name="check" size={13} color={colors.navy} /> : null}
-                        </Pressable>
-                      );
-                    })}
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.sheetScrollContent}
+                >
+                  <View style={styles.section}>
+                    <Text style={[styles.sectionLabel, { color: colors.mist }]}>
+                      {locale === "ko" ? "언어" : "Language"}
+                    </Text>
+                    <View style={styles.optionRow}>
+                      {(["ko", "en"] as const).map((lang) => {
+                        const selected = locale === lang;
+                        return (
+                          <Pressable
+                            key={lang}
+                            style={[
+                              styles.optionBtn,
+                              {
+                                backgroundColor: selected ? colors.coral : colors.glass,
+                                borderColor: selected ? colors.coral : colors.line,
+                              },
+                            ]}
+                            onPress={() => setLocale(lang)}
+                          >
+                            <Text style={styles.optionFlag}>{lang === "ko" ? "🇰🇷" : "🇺🇸"}</Text>
+                            <Text style={[styles.optionLabel, { color: selected ? colors.navy : colors.cloud }]}>
+                              {lang === "ko" ? "한국어" : "English"}
+                            </Text>
+                            {selected ? <Feather name="check" size={13} color={colors.navy} /> : null}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
                   </View>
-                </View>
 
-                {/* 테마 */}
-                <View style={styles.section}>
-                  <Text style={[styles.sectionLabel, { color: colors.mist }]}>
-                    {locale === "ko" ? "테마" : "Theme"}
-                  </Text>
-                  <View style={styles.optionRow}>
-                    {(["light", "dark"] as const).map((scheme) => {
-                      const selected = colorScheme === scheme;
-                      return (
-                        <Pressable
-                          key={scheme}
-                          style={[
-                            styles.optionBtn,
-                            {
-                              backgroundColor: selected ? colors.mint : colors.glass,
-                              borderColor: selected ? colors.mint : colors.line,
-                            },
-                          ]}
-                          onPress={() => setColorScheme(scheme)}
-                        >
-                          <Feather
-                            name={scheme === "light" ? "sun" : "moon"}
-                            size={16}
-                            color={selected ? colors.navy : colors.cloud}
-                          />
-                          <Text style={[styles.optionLabel, { color: selected ? colors.navy : colors.cloud }]}>
-                            {scheme === "light"
-                              ? locale === "ko" ? "라이트" : "Light"
-                              : locale === "ko" ? "다크" : "Dark"}
-                          </Text>
-                          {selected ? <Feather name="check" size={13} color={colors.navy} /> : null}
-                        </Pressable>
-                      );
-                    })}
+                  <View style={styles.section}>
+                    <Text style={[styles.sectionLabel, { color: colors.mist }]}>
+                      {locale === "ko" ? "테마" : "Theme"}
+                    </Text>
+                    <View style={styles.optionRow}>
+                      {(["light", "dark"] as const).map((scheme) => {
+                        const selected = colorScheme === scheme;
+                        return (
+                          <Pressable
+                            key={scheme}
+                            style={[
+                              styles.optionBtn,
+                              {
+                                backgroundColor: selected ? colors.mint : colors.glass,
+                                borderColor: selected ? colors.mint : colors.line,
+                              },
+                            ]}
+                            onPress={() => setColorScheme(scheme)}
+                          >
+                            <Feather
+                              name={scheme === "light" ? "sun" : "moon"}
+                              size={16}
+                              color={selected ? colors.navy : colors.cloud}
+                            />
+                            <Text style={[styles.optionLabel, { color: selected ? colors.navy : colors.cloud }]}>
+                              {scheme === "light"
+                                ? locale === "ko" ? "라이트" : "Light"
+                                : locale === "ko" ? "다크" : "Dark"}
+                            </Text>
+                            {selected ? <Feather name="check" size={13} color={colors.navy} /> : null}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
                   </View>
-                </View>
+
+                  <View style={styles.section}>
+                    <Text style={[styles.sectionLabel, { color: colors.mist }]}>
+                      {locale === "ko" ? "길찾기 점수" : "Route scoring"}
+                    </Text>
+                    <RouteScoreInfoCard locale={locale} />
+                  </View>
+                </ScrollView>
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -203,13 +212,15 @@ const styles = StyleSheet.create({
   backButton: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 4 },
   backLabel: { fontSize: 14, fontWeight: "600" },
   themeToggle: {
-    width: 34, height: 34, borderRadius: 17,
-    borderWidth: 1, alignItems: "center", justifyContent: "center",
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   title: { fontSize: 30, fontWeight: "800", letterSpacing: -0.6 },
   subtitle: { fontSize: 14, lineHeight: 22, paddingRight: spacing.md },
-
-  // 모달
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.40)",
@@ -224,7 +235,9 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingBottom: spacing.xxl,
     gap: spacing.lg,
+    maxHeight: "84%",
   },
+  sheetScrollContent: { gap: spacing.lg },
   sheetHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -232,16 +245,29 @@ const styles = StyleSheet.create({
   },
   sheetTitle: { fontSize: 18, fontWeight: "800" },
   closeBtn: {
-    width: 32, height: 32, borderRadius: 16,
-    borderWidth: 1, alignItems: "center", justifyContent: "center",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   section: { gap: spacing.sm },
-  sectionLabel: { fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8 },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
   optionRow: { flexDirection: "row", gap: spacing.sm },
   optionBtn: {
-    flex: 1, borderRadius: radii.md, borderWidth: 1,
-    paddingVertical: spacing.md, paddingHorizontal: spacing.sm,
-    alignItems: "center", gap: 6,
+    flex: 1,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    alignItems: "center",
+    gap: 6,
   },
   optionFlag: { fontSize: 22 },
   optionLabel: { fontSize: 14, fontWeight: "700" },

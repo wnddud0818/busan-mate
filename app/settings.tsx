@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { RouteScoreInfoCard } from "../src/components/common/route-score-info-card";
 import { Screen } from "../src/components/common/screen";
 import { SectionCard } from "../src/components/common/section-card";
 import { useAppStore } from "../src/stores/app-store";
@@ -15,7 +16,6 @@ export default function SettingsPage() {
 
   return (
     <Screen title={locale === "ko" ? "설정" : "Settings"} showBack>
-      {/* ── 언어 ── */}
       <SectionCard title={locale === "ko" ? "언어" : "Language"}>
         <View style={styles.row}>
           {(["ko", "en"] as const).map((lang) => {
@@ -43,7 +43,6 @@ export default function SettingsPage() {
         </View>
       </SectionCard>
 
-      {/* ── 테마 ── */}
       <SectionCard title={locale === "ko" ? "테마" : "Theme"}>
         <View style={styles.row}>
           {(["light", "dark"] as const).map((scheme) => {
@@ -77,7 +76,8 @@ export default function SettingsPage() {
         </View>
       </SectionCard>
 
-      {/* ── 앱 정보 ── */}
+      <RouteScoreInfoCard locale={locale} />
+
       <SectionCard title={locale === "ko" ? "앱 정보" : "About"}>
         <View style={styles.infoRow}>
           <Text style={[styles.infoLabel, { color: colors.mist }]}>
