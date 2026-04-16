@@ -33,8 +33,19 @@ If keys are missing, the app automatically falls back to seeded Busan data and l
 ```bash
 pnpm typecheck
 pnpm test
+pnpm build:web
 pnpm prebuild
 ```
+
+## Web Deployment
+
+The app already supports Expo Web and can be exported as static assets.
+
+```bash
+pnpm build:web
+```
+
+Deploy the generated `web-dist/` folder to a static host such as Vercel, Netlify, or Cloudflare Pages.
 
 ## Supabase
 

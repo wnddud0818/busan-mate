@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Linking from "expo-linking";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
@@ -173,6 +174,7 @@ export const bootstrapAuth = async (locale: AppLocale = "ko"): Promise<UserProfi
 
 export const sendMagicLink = async (email: string, locale: AppLocale = "ko") => {
   if (supabase) {
+    const emailRedirectTo = Platform.OS === "web" ? Linking.createURL("/") : "busanmate://";
     const traceId = logApiRequest({
       label: "auth.magic-link",
       summary: "Sending Supabase magic link.",
@@ -184,7 +186,7 @@ export const sendMagicLink = async (email: string, locale: AppLocale = "ko") => 
     await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: "busanmate://",
+        emailRedirectTo,
       },
     });
 

@@ -31,6 +31,36 @@ export const startAreas: StartArea[] = [
     district: { ko: "동구", en: "Dong-gu" },
     coordinates: { latitude: 35.1151, longitude: 129.0414 },
   },
+  {
+    id: "centum-city",
+    name: { ko: "센텀시티", en: "Centum City" },
+    district: { ko: "해운대구", en: "Haeundae-gu" },
+    coordinates: { latitude: 35.1692, longitude: 129.1295 },
+  },
+  {
+    id: "sasang",
+    name: { ko: "사상", en: "Sasang" },
+    district: { ko: "사상구", en: "Sasang-gu" },
+    coordinates: { latitude: 35.1627, longitude: 128.9857 },
+  },
+  {
+    id: "gimhae-airport",
+    name: { ko: "김해공항", en: "Gimhae Airport" },
+    district: { ko: "강서구", en: "Gangseo-gu" },
+    coordinates: { latitude: 35.1796, longitude: 128.9382 },
+  },
+  {
+    id: "songdo",
+    name: { ko: "송도", en: "Songdo" },
+    district: { ko: "서구", en: "Seo-gu" },
+    coordinates: { latitude: 35.0763, longitude: 129.0167 },
+  },
+  {
+    id: "osiria",
+    name: { ko: "오시리아", en: "Osiria" },
+    district: { ko: "기장군", en: "Gijang-gun" },
+    coordinates: { latitude: 35.1967, longitude: 129.2271 },
+  },
 ];
 
 export const startAreaIds = startAreas.map((area) => area.id) as [StartAreaId, ...StartAreaId[]];

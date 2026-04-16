@@ -5,7 +5,7 @@ import { StartAreaId, WeatherRouteSignal, WeatherSnapshot } from "../types/domai
 import { logApiError, logApiRequest, logApiResponse, logDebugInfo } from "./debug-service";
 
 const FORECAST_ENDPOINT = "https://api.open-meteo.com/v1/forecast";
-const FORECAST_WINDOW_DAYS = 16;
+export const WEATHER_FORECAST_WINDOW_DAYS = 16;
 
 const rainyCodes = new Set([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99]);
 const clearCodes = new Set([0, 1]);
@@ -108,7 +108,7 @@ export const fetchWeatherSnapshot = async ({
 
   const targetDate = parseISO(travelDate);
   const offsetDays = differenceInCalendarDays(startOfDay(targetDate), startOfDay(new Date()));
-  if (offsetDays < 0 || offsetDays >= FORECAST_WINDOW_DAYS) {
+  if (offsetDays < 0 || offsetDays >= WEATHER_FORECAST_WINDOW_DAYS) {
     logDebugInfo({
       label: "weather.forecast",
       summary: "Skipped weather fetch because the requested date was outside the forecast window.",
@@ -127,7 +127,7 @@ export const fetchWeatherSnapshot = async ({
     longitude: String(startArea.coordinates.longitude),
     daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
     timezone: "Asia/Seoul",
-    forecast_days: String(FORECAST_WINDOW_DAYS),
+    forecast_days: String(WEATHER_FORECAST_WINDOW_DAYS),
   });
   const traceId = logApiRequest({
     label: "weather.forecast",
