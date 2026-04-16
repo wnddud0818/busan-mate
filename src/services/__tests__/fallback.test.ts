@@ -28,6 +28,7 @@ describe("service fallbacks", () => {
       mobilityMode: "mixed",
       accessibilityNeeds: false,
       indoorFallback: true,
+      includeLodgingCost: true,
       locale: "ko",
     });
 
@@ -51,12 +52,35 @@ describe("service fallbacks", () => {
       mobilityMode: "mixed",
       accessibilityNeeds: false,
       indoorFallback: true,
+      includeLodgingCost: true,
       locale: "ko",
     });
 
     expect(result.itinerary.planningMeta.lodging?.source).toBe("fallback");
     expect(result.itinerary.planningMeta.lodging?.nights).toBe(1);
     expect(result.itinerary.planningMeta.lodging?.estimatedTotalKrw).toBeGreaterThan(0);
+  });
+
+  it("skips lodging costs when the user turns lodging off", async () => {
+    const result = await generateItinerary({
+      tripDays: 2,
+      totalBudgetKrw: 320000,
+      partySize: 2,
+      travelDate: "2026-04-16",
+      startAreaId: "seomyeon",
+      companionType: "friends",
+      interests: ["food", "night"],
+      budgetLevel: "balanced",
+      mobilityMode: "mixed",
+      accessibilityNeeds: false,
+      indoorFallback: true,
+      includeLodgingCost: false,
+      locale: "ko",
+    });
+
+    expect(result.itinerary.planningMeta.lodging?.source).toBe("none");
+    expect(result.itinerary.planningMeta.lodging?.estimatedTotalKrw).toBe(0);
+    expect(result.warnings).toContain("숙소비를 제외하고 예산을 계산했어요.");
   });
 
   it("requires upgrade for anonymous remote publishing", () => {

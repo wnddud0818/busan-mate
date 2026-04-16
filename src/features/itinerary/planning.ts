@@ -53,6 +53,7 @@ export const deriveBudgetLevel = ({
 export const normalizeTripPreferences = (preferences: TripPreferences): TripPreferences => ({
   ...preferences,
   budgetLevel: deriveBudgetLevel(preferences),
+  includeLodgingCost: preferences.includeLodgingCost ?? true,
 });
 
 export const buildBudgetSummary = ({

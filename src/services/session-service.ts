@@ -1,5 +1,5 @@
 import { hasSupabaseConfig } from "../config/env";
-import { supabase } from "../lib/supabase";
+import { canInvokeEdgeFunction, supabase } from "../lib/supabase";
 import {
   Itinerary,
   LocationEvent,
@@ -208,14 +208,19 @@ export const ingestLocationEvent = async ({
     session,
     userProfile,
   });
+  const remoteIngestAvailable =
+    hasRemoteProfile(userProfile) && sessionResult.session.remoteId && supabase
+      ? await canInvokeEdgeFunction("ingest-location-event")
+      : false;
 
-  if (!hasRemoteProfile(userProfile) || !sessionResult.session.remoteId) {
+  if (!hasRemoteProfile(userProfile) || !sessionResult.session.remoteId || !remoteIngestAvailable) {
     logDebugInfo({
       label: "ingest-location-event",
       summary: "Keeping location event local because remote sync is unavailable.",
       payload: {
         eventId: event.id,
         sessionId: session.id,
+        hasRemoteFunction: remoteIngestAvailable,
       },
     });
     return {

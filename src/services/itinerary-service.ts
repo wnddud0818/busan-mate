@@ -9,7 +9,7 @@ import {
   normalizeTripPreferences,
 } from "../features/itinerary/planning";
 import { buildFallbackItinerary, buildTransitLeg, validateStructuredItinerary } from "../features/itinerary/planner";
-import { supabase } from "../lib/supabase";
+import { canInvokeEdgeFunction, supabase } from "../lib/supabase";
 import {
   AppLocale,
   GenerateItineraryResponse,
@@ -52,6 +52,7 @@ type ResolvedTourLodgingCandidate = {
 };
 
 const TOUR_API_BASE_URL = "https://apis.data.go.kr/B551011/KorService2";
+const TOUR_LODGING_CONTENT_TYPE_ID = "32";
 
 const mapTourCategory = (contentTypeId?: string) => {
   switch (contentTypeId) {
@@ -288,18 +289,19 @@ const fetchVisitKoreaLodgingSummary = async (
 
   const candidates = (
     await fetchTourApiItems({
-      label: "visit-korea.searchStay2",
-      path: "searchStay2",
+      label: "visit-korea.areaBasedList2.lodging",
+      path: "areaBasedList2",
       params: {
         areaCode: "6",
-        numOfRows: "12",
+        contentTypeId: TOUR_LODGING_CONTENT_TYPE_ID,
+        numOfRows: "20",
         pageNo: "1",
       },
     })
   )
     .map<TourLodgingCandidate>((item) => ({
       contentId: toTrimmedString(item.contentid),
-      contentTypeId: toTrimmedString(item.contenttypeid) ?? "32",
+      contentTypeId: toTrimmedString(item.contenttypeid) ?? TOUR_LODGING_CONTENT_TYPE_ID,
       title: toTrimmedString(item.title),
       address: toTrimmedString(item.addr1),
       latitude: Number(item.mapy),
@@ -317,7 +319,7 @@ const fetchVisitKoreaLodgingSummary = async (
           startArea.coordinates
         )
     )
-    .slice(0, 4);
+    .slice(0, 8);
 
   for (const candidate of candidates) {
     const [introItems, roomItems] = await Promise.all([
@@ -384,9 +386,21 @@ const resolveLodgingSummary = async (
     return buildNoLodgingSummary();
   }
 
+  if (!preferences.includeLodgingCost) {
+    logDebugInfo({
+      label: "visit-korea.lodging",
+      summary: "Lodging cost was excluded by user preference.",
+      payload: {
+        startArea: startArea.id,
+        nights,
+      },
+    });
+    return buildNoLodgingSummary();
+  }
+
   if (!hasTourApiKey) {
     logDebugInfo({
-      label: "visit-korea.searchStay2",
+      label: "visit-korea.lodging",
       summary: "Tour API key is missing, so a fallback lodging estimate is being used.",
       payload: {
         startArea: startArea.id,
@@ -407,7 +421,7 @@ const resolveLodgingSummary = async (
     }
   } catch (error) {
     logApiError({
-      label: "visit-korea.searchStay2",
+      label: "visit-korea.lodging",
       summary: "VisitKorea lodging lookup failed, so a fallback estimate is being used.",
       error,
       payload: {
@@ -849,6 +863,14 @@ const collectPlanningWarnings = (itinerary: Itinerary) => {
     warnings.push(itinerary.planningMeta.budgetSummary.summary[locale]);
   }
 
+  if (itinerary.preferences.tripDays > 1 && itinerary.preferences.includeLodgingCost === false) {
+    warnings.push(
+      locale === "ko"
+        ? "숙소비를 제외하고 예산을 계산했어요."
+        : "The budget was calculated without lodging costs."
+    );
+  }
+
   if (itinerary.planningMeta.lodging?.source === "fallback" && itinerary.planningMeta.lodging.note) {
     warnings.push(itinerary.planningMeta.lodging.note[locale]);
   }
@@ -885,8 +907,10 @@ export const generateItinerary = async (
     ),
   ]);
   const places = candidatePlaces.places;
+  const remoteGenerationAvailable =
+    hasSupabaseConfig && supabase ? await canInvokeEdgeFunction("generate-itinerary") : false;
 
-  if (hasSupabaseConfig && supabase) {
+  if (remoteGenerationAvailable) {
     const traceId = logApiRequest({
       label: "generate-itinerary",
       summary: "Sending itinerary generation payload to Supabase Edge Function.",
@@ -899,7 +923,7 @@ export const generateItinerary = async (
       },
     });
 
-    const { data, error } = await supabase.functions.invoke("generate-itinerary", {
+    const { data, error } = await supabase!.functions.invoke("generate-itinerary", {
       body: {
         preferences: normalizedPreferences,
         places,
@@ -974,9 +998,12 @@ export const generateItinerary = async (
   } else {
     logDebugInfo({
       label: "generate-itinerary",
-      summary: "Supabase is not configured, so local itinerary planning is being used.",
+      summary: hasSupabaseConfig
+        ? "Supabase Edge Function is unavailable, so local itinerary planning is being used."
+        : "Supabase is not configured, so local itinerary planning is being used.",
       payload: {
         preferences: normalizedPreferences,
+        reason: hasSupabaseConfig ? "edge-function-unavailable" : "not-configured",
       },
     });
   }

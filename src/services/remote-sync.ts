@@ -1,6 +1,6 @@
 import { hasSupabaseConfig } from "../config/env";
 import { buildSharedSnapshot } from "../features/ranking/scoring";
-import { supabase } from "../lib/supabase";
+import { canInvokeEdgeFunction, supabase } from "../lib/supabase";
 import { Itinerary, SharedItinerary, SyncStatus, UserProfile } from "../types/domain";
 import { logApiError, logApiRequest, logApiResponse, logDebugInfo } from "./debug-service";
 
@@ -79,6 +79,23 @@ export const syncItineraryRecord = async ({
     logDebugInfo({
       label: "publish-itinerary",
       summary: "Skipping remote publish because there is no remote profile.",
+      payload: {
+        itineraryId: itinerary.id,
+        shareStatus,
+      },
+    });
+    return {
+      itinerary: nextItinerary,
+      shared: shareStatus === "published" ? toLocalSharedSnapshot(nextItinerary, nextItinerary.syncStatus) : undefined,
+      syncStatus: nextItinerary.syncStatus,
+    };
+  }
+
+  const remotePublishAvailable = await canInvokeEdgeFunction("publish-itinerary");
+  if (!remotePublishAvailable) {
+    logDebugInfo({
+      label: "publish-itinerary",
+      summary: "Skipping remote publish because the Supabase Edge Function is unavailable.",
       payload: {
         itineraryId: itinerary.id,
         shareStatus,

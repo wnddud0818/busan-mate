@@ -1,6 +1,6 @@
 import { hasSupabaseConfig } from "../config/env";
 import { buildGuideAnswer } from "../features/guide/answerer";
-import { supabase } from "../lib/supabase";
+import { canInvokeEdgeFunction, supabase } from "../lib/supabase";
 import { GuideAnswerResult, GuideContext, TripSession, UserProfile } from "../types/domain";
 import { createId } from "../utils/id";
 import { logApiError, logApiRequest, logApiResponse, logDebugInfo } from "./debug-service";
@@ -19,7 +19,11 @@ export const answerGuideQuestion = async ({
   userProfile?: UserProfile;
   userMessageId: string;
 }): Promise<GuideAnswerResult> => {
-  if (hasRemoteProfile(userProfile) && session.remoteId && supabase) {
+  const remoteProfileReady = hasRemoteProfile(userProfile);
+  const remoteGuideAvailable =
+    remoteProfileReady && session.remoteId && supabase ? await canInvokeEdgeFunction("answer-guide") : false;
+
+  if (remoteProfileReady && session.remoteId && supabase && remoteGuideAvailable) {
     const traceId = logApiRequest({
       label: "answer-guide",
       summary: "Sending guide question to Supabase Edge Function.",
@@ -81,8 +85,9 @@ export const answerGuideQuestion = async ({
     payload: {
       question,
       sessionId: session.id,
-      hasRemoteProfile: hasRemoteProfile(userProfile),
+      hasRemoteProfile: remoteProfileReady,
       hasRemoteSession: Boolean(session.remoteId),
+      hasRemoteFunction: remoteGuideAvailable,
     },
   });
 

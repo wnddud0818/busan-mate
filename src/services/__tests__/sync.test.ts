@@ -22,6 +22,7 @@ const buildItinerary = (): Itinerary => ({
     mobilityMode: "mixed",
     accessibilityNeeds: false,
     indoorFallback: false,
+    includeLodgingCost: true,
     locale: "ko",
   },
   days: [
@@ -150,6 +151,7 @@ describe("remote sync services", () => {
         },
         from,
       },
+      canInvokeEdgeFunction: jest.fn().mockResolvedValue(true),
     }));
 
     const { bootstrapAuth } = require("../auth-service") as typeof import("../auth-service");
@@ -172,6 +174,7 @@ describe("remote sync services", () => {
           }),
         },
       },
+      canInvokeEdgeFunction: jest.fn().mockResolvedValue(true),
     }));
 
     const { publishItinerary } = require("../publish-service") as typeof import("../publish-service");
@@ -197,6 +200,7 @@ describe("remote sync services", () => {
           }),
         },
       },
+      canInvokeEdgeFunction: jest.fn().mockResolvedValue(true),
     }));
 
     const { rateItinerary } = require("../rating-service") as typeof import("../rating-service");

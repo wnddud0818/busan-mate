@@ -23,6 +23,7 @@ export const tripPreferencesSchema = z.object({
   mobilityMode: z.enum(["transit", "walk", "mixed"]),
   accessibilityNeeds: z.boolean(),
   indoorFallback: z.boolean(),
+  includeLodgingCost: z.boolean(),
   locale: localeSchema,
 });
 

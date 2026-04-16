@@ -14,6 +14,7 @@ const preferences: TripPreferences = {
   mobilityMode: "mixed",
   accessibilityNeeds: false,
   indoorFallback: true,
+  includeLodgingCost: true,
   locale: "ko",
 };
 

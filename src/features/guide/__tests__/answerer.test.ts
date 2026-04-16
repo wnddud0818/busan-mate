@@ -15,6 +15,7 @@ describe("guide answerer", () => {
       mobilityMode: "mixed",
       accessibilityNeeds: false,
       indoorFallback: true,
+      includeLodgingCost: true,
       locale: "ko",
     });
 

@@ -1,6 +1,6 @@
 import { hasSupabaseConfig } from "../config/env";
 import { RateItineraryResult, Itinerary, UserProfile } from "../types/domain";
-import { supabase } from "../lib/supabase";
+import { canInvokeEdgeFunction, supabase } from "../lib/supabase";
 import { logApiError, logApiRequest, logApiResponse, logDebugInfo } from "./debug-service";
 import { hasRemoteProfile, toLocalSharedSnapshot } from "./remote-sync";
 
@@ -23,14 +23,19 @@ export const rateItinerary = async ({
   userProfile?: UserProfile;
 }): Promise<RateItineraryResult> => {
   const localSyncStatus = hasSupabaseConfig ? "pending" : "synced";
+  const remoteProfileReady = hasRemoteProfile(userProfile);
+  const remoteRatingAvailable =
+    remoteProfileReady && supabase ? await canInvokeEdgeFunction("rate-itinerary") : false;
 
-  if (!hasRemoteProfile(userProfile)) {
+  if (!remoteProfileReady || !remoteRatingAvailable) {
     logDebugInfo({
       label: "rate-itinerary",
-      summary: "Applying itinerary rating locally because there is no remote profile.",
+      summary: "Applying itinerary rating locally because remote rating is unavailable.",
       payload: {
         itineraryId: itinerary.id,
         rating,
+        hasRemoteProfile: remoteProfileReady,
+        hasRemoteFunction: remoteRatingAvailable,
       },
     });
     const nextItinerary = applyLocalRating(itinerary, rating, localSyncStatus);

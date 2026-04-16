@@ -9,7 +9,10 @@ import { z } from "zod";
 import { startAreas } from "../../data/start-areas";
 import { tripPreferencesSchema } from "../../features/itinerary/schema";
 import { deriveBudgetLevel, makeBudgetLabel } from "../../features/itinerary/planning";
-import { fetchWeatherSnapshot } from "../../services/weather-service";
+import {
+  fetchWeatherSnapshot,
+  WEATHER_FORECAST_WINDOW_DAYS,
+} from "../../services/weather-service";
 import { AppLocale, InterestTag, TripPreferences } from "../../types/domain";
 import { formatKrwCompact } from "../../utils/currency";
 import { ColorPalette, radii, spacing } from "../../theme/tokens";
@@ -21,6 +24,8 @@ const optionLabel = {
     "1": { ko: "1일", en: "1 day" },
     "2": { ko: "2일", en: "2 days" },
     "3": { ko: "3일", en: "3 days" },
+    "4": { ko: "4일", en: "4 days" },
+    "5": { ko: "5일", en: "5 days" },
   },
   companionType: {
     solo: { ko: "혼자", en: "Solo" },
@@ -52,7 +57,8 @@ const optionLabel = {
 
 const budgetQuickPicks = [120000, 200000, 300000, 450000];
 const partyQuickPicks = [1, 2, 3, 4];
-const dateChoices = Array.from({ length: 7 }, (_, index) =>
+const tripDayChoices = [1, 2, 3, 4, 5] as const;
+const dateChoices = Array.from({ length: WEATHER_FORECAST_WINDOW_DAYS }, (_, index) =>
   format(addDays(new Date(), index), "yyyy-MM-dd")
 );
 
@@ -172,6 +178,7 @@ export const TripPreferencesForm = ({
       mobilityMode: "mixed",
       accessibilityNeeds: false,
       indoorFallback: true,
+      includeLodgingCost: true,
       locale,
     },
   });
@@ -401,7 +408,7 @@ export const TripPreferencesForm = ({
                 {locale === "ko" ? "여행 기간" : "Trip length"}
               </Text>
               <View style={styles.rowWrap}>
-                {[1, 2, 3].map((day) => (
+                {tripDayChoices.map((day) => (
                   <Pill
                     key={day}
                     label={localized(
@@ -522,6 +529,31 @@ export const TripPreferencesForm = ({
             />
 
             {/* 액션 버튼 */}
+            <Controller
+              control={control}
+              name="includeLodgingCost"
+              render={({ field: { onChange, value } }) => (
+                <View style={styles.switchRow}>
+                  <View style={styles.switchCopy}>
+                    <Text style={styles.label}>
+                      {locale === "ko" ? "숙소비 포함" : "Include lodging"}
+                    </Text>
+                    <Text style={styles.switchHint}>
+                      {locale === "ko"
+                        ? "1박 이상 일정의 숙소비를 총 예산 계산에 반영합니다."
+                        : "Count lodging costs in the total budget for overnight trips."}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={value}
+                    onValueChange={onChange}
+                    trackColor={{ true: colors.coral, false: colors.lineBright }}
+                    thumbColor={value ? colors.sand : colors.smoke}
+                  />
+                </View>
+              )}
+            />
+
             <View style={styles.actionRow}>
               <Pressable onPress={() => setStep(1)} style={styles.backButton}>
                 <Text style={styles.backButtonText}>

@@ -3,7 +3,17 @@ export type AppLocale = "ko" | "en";
 export type CompanionType = "solo" | "couple" | "family" | "friends";
 export type BudgetLevel = "value" | "balanced" | "premium";
 export type MobilityMode = "transit" | "walk" | "mixed";
-export type StartAreaId = "seomyeon" | "haeundae" | "gwangalli" | "nampo" | "busan-station";
+export type StartAreaId =
+  | "seomyeon"
+  | "haeundae"
+  | "gwangalli"
+  | "nampo"
+  | "busan-station"
+  | "centum-city"
+  | "sasang"
+  | "gimhae-airport"
+  | "songdo"
+  | "osiria";
 export type WeatherRouteSignal = "clear" | "mixed" | "rainy" | "heat" | "cold";
 export type InterestTag =
   | "food"
@@ -203,6 +213,7 @@ export interface TripPreferences {
   mobilityMode: MobilityMode;
   accessibilityNeeds: boolean;
   indoorFallback: boolean;
+  includeLodgingCost: boolean;
   locale: AppLocale;
 }
 

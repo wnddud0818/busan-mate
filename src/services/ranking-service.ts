@@ -1,6 +1,6 @@
 import { hasSupabaseConfig } from "../config/env";
 import { materializeRanking } from "../features/ranking/scoring";
-import { supabase } from "../lib/supabase";
+import { canInvokeEdgeFunction, supabase } from "../lib/supabase";
 import { LocationEvent, RankingSnapshot, SharedItinerary } from "../types/domain";
 import { logApiError, logApiRequest, logApiResponse, logDebugInfo } from "./debug-service";
 
@@ -11,7 +11,10 @@ export const loadRankings = async ({
   sharedItineraries: SharedItinerary[];
   locationEvents: LocationEvent[];
 }): Promise<RankingSnapshot[]> => {
-  if (hasSupabaseConfig && supabase) {
+  const remoteRankingAvailable =
+    hasSupabaseConfig && supabase ? await canInvokeEdgeFunction("materialize-ranking") : false;
+
+  if (remoteRankingAvailable) {
     const traceId = logApiRequest({
       label: "materialize-ranking",
       summary: "Requesting materialized rankings from Supabase.",
@@ -20,7 +23,7 @@ export const loadRankings = async ({
         locationEventCount: locationEvents.length,
       },
     });
-    const { data, error } = await supabase.functions.invoke("materialize-ranking");
+    const { data, error } = await supabase!.functions.invoke("materialize-ranking");
 
     if (!error && Array.isArray(data)) {
       logApiResponse({
@@ -46,6 +49,7 @@ export const loadRankings = async ({
     payload: {
       sharedCount: sharedItineraries.length,
       locationEventCount: locationEvents.length,
+      hasRemoteFunction: remoteRankingAvailable,
     },
   });
 

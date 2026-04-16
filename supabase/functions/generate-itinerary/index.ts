@@ -77,6 +77,7 @@ type Preferences = {
   mobilityMode: "transit" | "walk" | "mixed";
   accessibilityNeeds: boolean;
   indoorFallback: boolean;
+  includeLodgingCost: boolean;
 };
 
 type PlannerDebug = {
