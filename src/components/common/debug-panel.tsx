@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useAppStore } from "../../stores/app-store";
-import { colors, radii, spacing } from "../../theme/tokens";
+import { radii, spacing } from "../../theme/tokens";
+import { useColors } from "../../theme/use-colors";
 
 const formatTimestamp = (value: string) => {
   const parsed = new Date(value);
@@ -18,15 +19,33 @@ const formatTimestamp = (value: string) => {
   });
 };
 
+// Panel bg is always dark — use fixed dark-theme values for panel internals
+const PANEL_TEXT = "#EDF6FF";
+const PANEL_HINT = "rgba(237,246,255,0.68)";
+const PANEL_BADGE = "#20D9C8";
+const PANEL_TIME = "rgba(237,246,255,0.50)";
+const PANEL_TRACE = "rgba(237,246,255,0.45)";
+const PANEL_SUMMARY = "#FAE0A0";
+const PANEL_SMOKE = "#B8D4E8";
+const PANEL_EMPTY = "rgba(237,246,255,0.65)";
+const PANEL_BORDER = "rgba(237,246,255,0.12)";
+const PANEL_CLEAR_BG = "rgba(255,255,255,0.08)";
+
 export const DebugPanel = () => {
+  const colors = useColors();
   const debugLogs = useAppStore((state) => state.debugLogs);
   const clearDebugLogs = useAppStore((state) => state.actions.clearDebugLogs);
   const [open, setOpen] = useState(debugLogs.length > 0);
 
   return (
     <View style={styles.wrapper}>
-      <Pressable style={styles.toggleButton} onPress={() => setOpen((current) => !current)}>
-        <Text style={styles.toggleText}>{open ? "Hide debug" : `Debug console (${debugLogs.length})`}</Text>
+      <Pressable
+        style={[styles.toggleButton, { borderColor: colors.lineBright, backgroundColor: colors.glass }]}
+        onPress={() => setOpen((current) => !current)}
+      >
+        <Text style={[styles.toggleText, { color: colors.sand }]}>
+          {open ? "Hide debug" : `Debug console (${debugLogs.length})`}
+        </Text>
       </Pressable>
 
       {open ? (
@@ -93,20 +112,17 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: "rgba(255,255,255,0.08)",
     paddingHorizontal: spacing.md,
     paddingVertical: 10,
   },
   toggleText: {
-    color: colors.sand,
     fontSize: 13,
     fontWeight: "800",
   },
   panel: {
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: PANEL_BORDER,
     backgroundColor: "rgba(6,19,29,0.86)",
     padding: spacing.md,
     gap: spacing.sm,
@@ -122,12 +138,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   panelTitle: {
-    color: colors.cloud,
+    color: PANEL_TEXT,
     fontSize: 16,
     fontWeight: "800",
   },
   panelHint: {
-    color: "rgba(248,251,253,0.68)",
+    color: PANEL_HINT,
     fontSize: 12,
     lineHeight: 18,
   },
@@ -135,12 +151,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: 8,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: PANEL_CLEAR_BG,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: PANEL_BORDER,
   },
   clearButtonText: {
-    color: colors.cloud,
+    color: PANEL_TEXT,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -151,13 +167,13 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   emptyText: {
-    color: "rgba(248,251,253,0.65)",
+    color: PANEL_EMPTY,
     lineHeight: 20,
   },
   logCard: {
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: PANEL_BORDER,
     backgroundColor: "rgba(255,255,255,0.04)",
     padding: spacing.md,
     gap: spacing.xs,
@@ -177,30 +193,30 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   logBadge: {
-    color: colors.mint,
+    color: PANEL_BADGE,
     fontSize: 11,
     fontWeight: "800",
   },
   logTime: {
-    color: "rgba(248,251,253,0.5)",
+    color: PANEL_TIME,
     fontSize: 11,
   },
   logLabel: {
-    color: colors.cloud,
+    color: PANEL_TEXT,
     fontSize: 14,
     fontWeight: "800",
   },
   traceId: {
-    color: "rgba(248,251,253,0.45)",
+    color: PANEL_TRACE,
     fontSize: 11,
   },
   logSummary: {
-    color: colors.sand,
+    color: PANEL_SUMMARY,
     fontSize: 12,
     lineHeight: 18,
   },
   payloadText: {
-    color: colors.smoke,
+    color: PANEL_SMOKE,
     fontSize: 11,
     lineHeight: 17,
     fontFamily: "monospace",
