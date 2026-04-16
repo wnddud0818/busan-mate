@@ -20,7 +20,9 @@ function TabIcon({
   return (
     <View style={[styles.tabItem, focused && { backgroundColor: `${colors.coral}1E` }]}>
       <Feather name={name} size={20} color={color} />
-      <Text style={[styles.tabLabel, { color }]}>{label}</Text>
+      <Text numberOfLines={1} style={[styles.tabLabel, { color }]}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -45,6 +47,7 @@ export default function TabsLayout() {
         },
         tabBarActiveTintColor: colors.coral,
         tabBarInactiveTintColor: colors.fog,
+        tabBarIconStyle: styles.tabIconSlot,
       }}
     >
       <Tabs.Screen
@@ -76,11 +79,15 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
+  tabIconSlot: {
+    width: 72,
+  },
   tabItem: {
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    paddingHorizontal: 16,
+    minWidth: 64,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
   },
@@ -88,5 +95,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 0.2,
+    textAlign: "center",
   },
 });
