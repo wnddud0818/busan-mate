@@ -60,6 +60,21 @@ export interface BudgetSummary {
   summary: LocalizedText;
 }
 
+export interface LodgingSummary {
+  source: "visit-korea" | "fallback" | "none";
+  nights: number;
+  estimatedNightlyRateKrw: number;
+  estimatedRoomCount: number;
+  estimatedTotalKrw: number;
+  propertyName?: LocalizedText;
+  district?: string;
+  coordinates?: Coordinates;
+  bookingUrl?: string;
+  checkInTime?: string;
+  checkOutTime?: string;
+  note?: LocalizedText;
+}
+
 export interface PlannerCandidateDebug {
   placeId: string;
   name: LocalizedText;
@@ -109,6 +124,7 @@ export interface PlanningMeta {
   startArea: StartArea;
   weatherSnapshot: WeatherSnapshot;
   budgetSummary: BudgetSummary;
+  lodging?: LodgingSummary;
   debug?: PlanningDebug;
 }
 

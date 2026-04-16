@@ -29,6 +29,21 @@ type WeatherSnapshot = {
   precipitationProbabilityMax?: number;
 };
 
+type LodgingSummary = {
+  source: "visit-korea" | "fallback" | "none";
+  nights: number;
+  estimatedNightlyRateKrw: number;
+  estimatedRoomCount: number;
+  estimatedTotalKrw: number;
+  propertyName?: LocalizedText;
+  district?: string;
+  coordinates?: Coordinates;
+  bookingUrl?: string;
+  checkInTime?: string;
+  checkOutTime?: string;
+  note?: LocalizedText;
+};
+
 type Place = {
   id: string;
   slug: string;
@@ -277,9 +292,18 @@ const scorePlace = (place: Place, preferences: Preferences, weatherSnapshot: Wea
 const minimumStopCount = (tripDays: number, totalPlaces: number) =>
   Math.min(totalPlaces, Math.max(tripDays, Math.min(3, totalPlaces)));
 
-const selectPlaces = (places: Place[], preferences: Preferences, weatherSnapshot: WeatherSnapshot, startArea: StartArea) => {
+const getLodgingTotalKrw = (lodging?: LodgingSummary) => lodging?.estimatedTotalKrw ?? 0;
+
+const selectPlaces = (
+  places: Place[],
+  preferences: Preferences,
+  weatherSnapshot: WeatherSnapshot,
+  startArea: StartArea,
+  lodging?: LodgingSummary
+) => {
   const targetCount = Math.min(places.length, Math.max(4, preferences.tripDays * 3));
   const minimumCount = minimumStopCount(preferences.tripDays, places.length);
+  const availableBudgetKrw = Math.max(0, preferences.totalBudgetKrw - getLodgingTotalKrw(lodging));
   const ranked = [...places].sort(
     (left, right) =>
       scorePlace(right, preferences, weatherSnapshot, startArea) -
@@ -297,7 +321,7 @@ const selectPlaces = (places: Place[], preferences: Preferences, weatherSnapshot
       place.estimatedSpendKrw * preferences.partySize +
       (selected.length > 0 ? 1600 * preferences.partySize : 0);
 
-    if (estimatedTotal + additionalCost <= preferences.totalBudgetKrw) {
+    if (estimatedTotal + additionalCost <= availableBudgetKrw) {
       selected.push(place);
       estimatedTotal += additionalCost;
     }
@@ -714,6 +738,7 @@ const buildPlanningDebug = ({
   weatherSnapshot,
   estimatedTotalKrw,
   strategy,
+  lodging,
 }: {
   preferences: Preferences;
   places: Place[];
@@ -735,6 +760,7 @@ const buildPlanningDebug = ({
   weatherSnapshot: WeatherSnapshot;
   estimatedTotalKrw: number;
   strategy: "within" | "minimum";
+  lodging?: LodgingSummary;
 }): PlannerDebug => {
   const selectedIds = new Set(selectedPlaces.map((place) => place.id));
   const routeOrder = new Map(selectedPlaces.map((place, index) => [place.id, index + 1]));
@@ -790,6 +816,9 @@ const buildPlanningDebug = ({
     notes: [
       "remote-ai planner debug snapshot",
       `Selection strategy ${strategy}`,
+      getLodgingTotalKrw(lodging) > 0
+        ? `Lodging estimate added: ${getLodgingTotalKrw(lodging)} KRW.`
+        : "No lodging estimate added.",
       "Fallback-free status is resolved on the client after live transit enrichment.",
     ],
   };
@@ -800,14 +829,15 @@ Deno.serve(async (request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const { preferences, places = [], startArea, weatherSnapshot } = (await request.json()) as {
+  const { preferences, places = [], startArea, weatherSnapshot, lodging } = (await request.json()) as {
     preferences: Preferences;
     places: Place[];
     startArea: StartArea;
     weatherSnapshot: WeatherSnapshot;
+    lodging?: LodgingSummary;
   };
 
-  const selected = selectPlaces(places, preferences, weatherSnapshot, startArea);
+  const selected = selectPlaces(places, preferences, weatherSnapshot, startArea, lodging);
   const days = chunkByDays(selected.places, Math.min(preferences.tripDays, selected.places.length)).map(
     (dayStops, index) => {
       const dayDate = new Date(`${preferences.travelDate}T09:00:00+09:00`);
@@ -831,7 +861,7 @@ Deno.serve(async (request) => {
     }
   );
 
-  const estimatedTotalKrw = Math.round(
+  const routeTotalKrw = Math.round(
     days.reduce(
       (total, day) =>
         total +
@@ -845,6 +875,7 @@ Deno.serve(async (request) => {
       0
     )
   );
+  const estimatedTotalKrw = routeTotalKrw + getLodgingTotalKrw(lodging);
   const finalStrategy =
     selected.strategy === "minimum" || estimatedTotalKrw > preferences.totalBudgetKrw ? "minimum" : "within";
   const planningDebug = buildPlanningDebug({
@@ -856,6 +887,7 @@ Deno.serve(async (request) => {
     weatherSnapshot,
     estimatedTotalKrw,
     strategy: finalStrategy,
+    lodging,
   });
 
   return json({
@@ -888,6 +920,7 @@ Deno.serve(async (request) => {
       planningMeta: {
         startArea,
         weatherSnapshot,
+        lodging,
         budgetSummary: {
           totalBudgetKrw: preferences.totalBudgetKrw,
           estimatedTotalKrw,

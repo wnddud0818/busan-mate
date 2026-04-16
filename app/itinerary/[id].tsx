@@ -182,6 +182,8 @@ export default function ItineraryDetailPage() {
       candidate: candidateMap.get(stop.place.id),
     }))
   );
+  const lodging = itinerary.planningMeta.lodging;
+  const hasLodgingCost = Boolean(lodging && lodging.nights > 0 && lodging.estimatedTotalKrw > 0);
   const allDroppedCandidates = (planningDebug?.candidatePlaces ?? [])
     .filter((candidate) => !candidate.selected)
     .sort((left, right) => {
@@ -204,6 +206,7 @@ export default function ItineraryDetailPage() {
       total + (item.stop.transitFromPrevious?.estimatedFareKrw ?? 0) * itinerary.preferences.partySize,
     0
   );
+  const lodgingSpendTotalKrw = lodging?.estimatedTotalKrw ?? 0;
   const budgetSelectedCount =
     planningDebug?.candidatePlaces.filter(
       (candidate) => candidate.selectionStage === "final" || candidate.selectionStage === "trimmed"
@@ -218,6 +221,9 @@ export default function ItineraryDetailPage() {
             "generate-itinerary.price",
             "weather.forecast",
             "visit-korea.areaBasedList2",
+            "visit-korea.searchStay2",
+            "visit-korea.detailInfo2",
+            "visit-korea.detailIntro2",
             "odsay.searchPubTransPathT",
             "get-transit-route",
           ].includes(log.label)
@@ -457,12 +463,49 @@ export default function ItineraryDetailPage() {
             value={formatKrwFull(transitSpendTotalKrw, locale)}
             colors={colors}
           />
+          {hasLodgingCost ? (
+            <DecisionStat
+              label={locale === "ko" ? "숙소" : "Lodging"}
+              value={formatKrwFull(lodgingSpendTotalKrw, locale)}
+              colors={colors}
+            />
+          ) : null}
           <DecisionStat
             label={locale === "ko" ? "잔여 예산" : "Remaining"}
             value={formatKrwFull(itinerary.planningMeta.budgetSummary.remainingBudgetKrw, locale)}
             colors={colors}
           />
         </View>
+
+        {hasLodgingCost && lodging ? (
+          <View
+            key="price-lodging"
+            style={[styles.compactRow, { borderTopColor: colors.line }]}
+          >
+            <Text style={[styles.compactTitle, { color: colors.cloud }]}>
+              {lodging.propertyName?.[locale] ??
+                (locale === "ko" ? "숙소 예상" : "Lodging estimate")}
+            </Text>
+            <Text style={[styles.compactCopy, { color: colors.mist }]}>
+              {locale === "ko"
+                ? `${lodging.nights}박 / ${lodging.estimatedRoomCount}실 / 1박 ${formatKrwFull(lodging.estimatedNightlyRateKrw, locale)} / 총 ${formatKrwFull(lodging.estimatedTotalKrw, locale)}`
+                : `${lodging.nights} night(s) / ${lodging.estimatedRoomCount} room(s) / ${formatKrwFull(lodging.estimatedNightlyRateKrw, locale)} per night / total ${formatKrwFull(lodging.estimatedTotalKrw, locale)}`}
+            </Text>
+            {lodging.district ? (
+              <Text style={[styles.compactCopy, { color: colors.mist }]}>{lodging.district}</Text>
+            ) : null}
+            {lodging.checkInTime || lodging.checkOutTime ? (
+              <Text style={[styles.compactCopy, { color: colors.mist }]}>
+                {locale === "ko"
+                  ? `체크인 ${lodging.checkInTime ?? "-"} / 체크아웃 ${lodging.checkOutTime ?? "-"}`
+                  : `Check-in ${lodging.checkInTime ?? "-"} / Check-out ${lodging.checkOutTime ?? "-"}`}
+              </Text>
+            ) : null}
+            {lodging.note ? (
+              <Text style={[styles.compactCopy, { color: colors.mint }]}>{lodging.note[locale]}</Text>
+            ) : null}
+          </View>
+        ) : null}
 
         {selectedStops.map(({ dayNumber, stop }) => (
           <View

@@ -118,6 +118,21 @@ const budgetSummarySchema = z.object({
   summary: localizedTextSchema,
 });
 
+const lodgingSummarySchema = z.object({
+  source: z.enum(["visit-korea", "fallback", "none"]),
+  nights: z.number().int().nonnegative(),
+  estimatedNightlyRateKrw: z.number().int().nonnegative(),
+  estimatedRoomCount: z.number().int().nonnegative(),
+  estimatedTotalKrw: z.number().int().nonnegative(),
+  propertyName: localizedTextSchema.optional(),
+  district: z.string().min(1).optional(),
+  coordinates: coordinatesSchema.optional(),
+  bookingUrl: z.string().url().optional(),
+  checkInTime: z.string().min(1).optional(),
+  checkOutTime: z.string().min(1).optional(),
+  note: localizedTextSchema.optional(),
+});
+
 const plannerCandidateDebugSchema = z.object({
   placeId: z.string().min(1),
   name: localizedTextSchema,
@@ -167,6 +182,7 @@ const planningMetaSchema = z.object({
   startArea: startAreaSchema,
   weatherSnapshot: weatherSnapshotSchema,
   budgetSummary: budgetSummarySchema,
+  lodging: lodgingSummarySchema.optional(),
   debug: planningDebugSchema.optional(),
 });
 

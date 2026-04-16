@@ -1,6 +1,9 @@
+import { getDistance } from "geolib";
+
 import { appEnv, hasOdsayApiKey, hasSupabaseConfig, hasTourApiKey } from "../config/env";
 import { seedPlaces } from "../data/seed";
 import {
+  buildBudgetSummary,
   estimatedSpendFromPriceLevel,
   getStartAreaOrDefault,
   normalizeTripPreferences,
@@ -11,9 +14,11 @@ import {
   AppLocale,
   GenerateItineraryResponse,
   Itinerary,
+  LodgingSummary,
   Place,
   PlannerEngine,
   PlannerPlacesSource,
+  StartArea,
   TransitLeg,
   TripPreferences,
 } from "../types/domain";
@@ -27,6 +32,27 @@ type CandidatePlacesResult = {
   seedCount: number;
 };
 
+type TourApiItem = Record<string, unknown>;
+type LodgingFallbackReason = "missing-api-key" | "live-rates-unavailable";
+type TourLodgingCandidate = {
+  contentId?: string;
+  contentTypeId: string;
+  title?: string;
+  address?: string;
+  latitude: number;
+  longitude: number;
+};
+type ResolvedTourLodgingCandidate = {
+  contentId: string;
+  contentTypeId: string;
+  title: string;
+  address?: string;
+  latitude: number;
+  longitude: number;
+};
+
+const TOUR_API_BASE_URL = "https://apis.data.go.kr/B551011/KorService2";
+
 const mapTourCategory = (contentTypeId?: string) => {
   switch (contentTypeId) {
     case "39":
@@ -38,6 +64,364 @@ const mapTourCategory = (contentTypeId?: string) => {
     default:
       return ["culture"] as const;
   }
+};
+
+const toTourItems = (payload: unknown): TourApiItem[] => {
+  const items = (payload as { response?: { body?: { items?: { item?: unknown } } } })?.response?.body?.items?.item;
+
+  if (Array.isArray(items)) {
+    return items.filter((item): item is TourApiItem => Boolean(item && typeof item === "object"));
+  }
+
+  if (items && typeof items === "object") {
+    return [items as TourApiItem];
+  }
+
+  return [];
+};
+
+const toTrimmedString = (value: unknown) => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const next = value.trim();
+  return next.length > 0 ? next : undefined;
+};
+
+const isHttpUrl = (value?: string) => Boolean(value && /^https?:\/\//i.test(value));
+
+const parsePositiveNumber = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.round(value);
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const digits = value.replace(/[^\d.]/g, "");
+  if (!digits) {
+    return null;
+  }
+
+  const parsed = Number(digits);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
+};
+
+const getFallbackRoomCount = (partySize: number) => Math.max(1, Math.ceil(partySize / 2));
+
+const getFallbackNightlyBaseRate = (budgetLevel: TripPreferences["budgetLevel"]) => {
+  switch (budgetLevel) {
+    case "value":
+      return 90000;
+    case "premium":
+      return 220000;
+    default:
+      return 140000;
+  }
+};
+
+const hasResolvedTourLodgingCandidate = (
+  candidate: TourLodgingCandidate
+): candidate is ResolvedTourLodgingCandidate =>
+  Boolean(
+    candidate.contentId &&
+      candidate.title &&
+      Number.isFinite(candidate.latitude) &&
+      Number.isFinite(candidate.longitude)
+  );
+
+const buildNoLodgingSummary = (): LodgingSummary => ({
+  source: "none",
+  nights: 0,
+  estimatedNightlyRateKrw: 0,
+  estimatedRoomCount: 0,
+  estimatedTotalKrw: 0,
+});
+
+const buildFallbackLodgingSummary = ({
+  preferences,
+  startArea,
+  reason,
+}: {
+  preferences: TripPreferences;
+  startArea: StartArea;
+  reason: LodgingFallbackReason;
+}): LodgingSummary => {
+  const nights = Math.max(0, preferences.tripDays - 1);
+  if (nights === 0) {
+    return buildNoLodgingSummary();
+  }
+
+  const estimatedRoomCount = getFallbackRoomCount(preferences.partySize);
+  const estimatedNightlyRateKrw = getFallbackNightlyBaseRate(preferences.budgetLevel) * estimatedRoomCount;
+  const estimatedTotalKrw = estimatedNightlyRateKrw * nights;
+
+  return {
+    source: "fallback",
+    nights,
+    estimatedNightlyRateKrw,
+    estimatedRoomCount,
+    estimatedTotalKrw,
+    propertyName: {
+      ko: `${startArea.name.ko} 인근 숙소 예상`,
+      en: `Estimated stay near ${startArea.name.en}`,
+    },
+    district: startArea.district.ko,
+    coordinates: startArea.coordinates,
+    note:
+      reason === "missing-api-key"
+        ? {
+            ko: "TourAPI 숙박 요금 키가 없어 예산 수준 기반 숙소 추정치를 사용했어요.",
+            en: "Used a budget-based lodging estimate because the TourAPI stay key is unavailable.",
+          }
+        : {
+            ko: "VisitKorea 숙박 요금을 찾지 못해 예산 수준 기반 숙소 추정치를 사용했어요.",
+            en: "Used a budget-based lodging estimate because no VisitKorea stay rates were available.",
+          },
+  };
+};
+
+const fetchTourApiItems = async ({
+  label,
+  path,
+  params,
+}: {
+  label: string;
+  path: string;
+  params: Record<string, string>;
+}) => {
+  const endpoint = `${TOUR_API_BASE_URL}/${path}`;
+  const searchParams = new URLSearchParams({
+    MobileOS: "ETC",
+    MobileApp: "BusanMate",
+    _type: "json",
+    serviceKey: appEnv.tourApiKey,
+    ...params,
+  });
+  const traceId = logApiRequest({
+    label,
+    summary: `Fetching ${path} from VisitKorea.`,
+    payload: {
+      endpoint,
+      params: Object.fromEntries(searchParams.entries()),
+    },
+  });
+
+  try {
+    const response = await fetch(`${endpoint}?${searchParams.toString()}`);
+    if (!response.ok) {
+      throw new Error(`${path} failed with status ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const items = toTourItems(payload);
+
+    logApiResponse({
+      label,
+      traceId,
+      summary: `VisitKorea ${path} returned ${items.length} item(s).`,
+      payload: {
+        count: items.length,
+        raw: payload,
+      },
+    });
+
+    return items;
+  } catch (error) {
+    logApiError({
+      label,
+      traceId,
+      summary: `VisitKorea ${path} lookup failed.`,
+      error,
+      payload: {
+        endpoint,
+        params: Object.fromEntries(searchParams.entries()),
+      },
+    });
+    throw error;
+  }
+};
+
+const pickBestRoomRate = (rooms: TourApiItem[], partySize: number) =>
+  rooms.reduce<{
+    estimatedNightlyRateKrw: number;
+    estimatedRoomCount: number;
+  } | null>((best, room) => {
+    const nightlyCandidates = [
+      parsePositiveNumber(room.roomoffseasonminfee1),
+      parsePositiveNumber(room.roomoffseasonminfee2),
+      parsePositiveNumber(room.roompeakseasonminfee1),
+      parsePositiveNumber(room.roompeakseasonminfee2),
+    ].filter((value): value is number => value != null);
+
+    if (nightlyCandidates.length === 0) {
+      return best;
+    }
+
+    const roomCapacity = Math.max(
+      1,
+      parsePositiveNumber(room.roommaxcount) ?? parsePositiveNumber(room.roombasecount) ?? 2
+    );
+    const estimatedRoomCount = Math.max(1, Math.ceil(partySize / roomCapacity));
+    const estimatedNightlyRateKrw = Math.min(...nightlyCandidates) * estimatedRoomCount;
+
+    if (!best || estimatedNightlyRateKrw < best.estimatedNightlyRateKrw) {
+      return {
+        estimatedNightlyRateKrw,
+        estimatedRoomCount,
+      };
+    }
+
+    return best;
+  }, null);
+
+const fetchVisitKoreaLodgingSummary = async (
+  preferences: TripPreferences,
+  startArea: StartArea
+): Promise<LodgingSummary | null> => {
+  const nights = Math.max(0, preferences.tripDays - 1);
+  if (nights === 0) {
+    return buildNoLodgingSummary();
+  }
+
+  const candidates = (
+    await fetchTourApiItems({
+      label: "visit-korea.searchStay2",
+      path: "searchStay2",
+      params: {
+        areaCode: "6",
+        numOfRows: "12",
+        pageNo: "1",
+      },
+    })
+  )
+    .map<TourLodgingCandidate>((item) => ({
+      contentId: toTrimmedString(item.contentid),
+      contentTypeId: toTrimmedString(item.contenttypeid) ?? "32",
+      title: toTrimmedString(item.title),
+      address: toTrimmedString(item.addr1),
+      latitude: Number(item.mapy),
+      longitude: Number(item.mapx),
+    }))
+    .filter(hasResolvedTourLodgingCandidate)
+    .sort(
+      (left, right) =>
+        getDistance(
+          { latitude: left.latitude, longitude: left.longitude },
+          startArea.coordinates
+        ) -
+        getDistance(
+          { latitude: right.latitude, longitude: right.longitude },
+          startArea.coordinates
+        )
+    )
+    .slice(0, 4);
+
+  for (const candidate of candidates) {
+    const [introItems, roomItems] = await Promise.all([
+      fetchTourApiItems({
+        label: "visit-korea.detailIntro2",
+        path: "detailIntro2",
+        params: {
+          contentId: candidate.contentId,
+          contentTypeId: candidate.contentTypeId,
+        },
+      }).catch(() => []),
+      fetchTourApiItems({
+        label: "visit-korea.detailInfo2",
+        path: "detailInfo2",
+        params: {
+          contentId: candidate.contentId,
+          contentTypeId: candidate.contentTypeId,
+        },
+      }).catch(() => []),
+    ]);
+
+    const roomRate = pickBestRoomRate(roomItems, preferences.partySize);
+    if (!roomRate) {
+      continue;
+    }
+
+    const intro = introItems[0];
+    const bookingUrl = toTrimmedString(intro?.reservationurl);
+
+    return {
+      source: "visit-korea",
+      nights,
+      estimatedNightlyRateKrw: roomRate.estimatedNightlyRateKrw,
+      estimatedRoomCount: roomRate.estimatedRoomCount,
+      estimatedTotalKrw: roomRate.estimatedNightlyRateKrw * nights,
+      propertyName: {
+        ko: candidate.title,
+        en: candidate.title,
+      },
+      district: candidate.address,
+      coordinates: {
+        latitude: candidate.latitude,
+        longitude: candidate.longitude,
+      },
+      bookingUrl: isHttpUrl(bookingUrl) ? bookingUrl : undefined,
+      checkInTime: toTrimmedString(intro?.checkintime),
+      checkOutTime: toTrimmedString(intro?.checkouttime),
+      note: {
+        ko: "숙소비는 VisitKorea 공개 최저 객실요금 기준 추정이에요.",
+        en: "Lodging is estimated from the lowest published VisitKorea room rate.",
+      },
+    };
+  }
+
+  return null;
+};
+
+const resolveLodgingSummary = async (
+  preferences: TripPreferences,
+  startArea: StartArea
+): Promise<LodgingSummary> => {
+  const nights = Math.max(0, preferences.tripDays - 1);
+  if (nights === 0) {
+    return buildNoLodgingSummary();
+  }
+
+  if (!hasTourApiKey) {
+    logDebugInfo({
+      label: "visit-korea.searchStay2",
+      summary: "Tour API key is missing, so a fallback lodging estimate is being used.",
+      payload: {
+        startArea: startArea.id,
+        nights,
+      },
+    });
+    return buildFallbackLodgingSummary({
+      preferences,
+      startArea,
+      reason: "missing-api-key",
+    });
+  }
+
+  try {
+    const liveLodging = await fetchVisitKoreaLodgingSummary(preferences, startArea);
+    if (liveLodging) {
+      return liveLodging;
+    }
+  } catch (error) {
+    logApiError({
+      label: "visit-korea.searchStay2",
+      summary: "VisitKorea lodging lookup failed, so a fallback estimate is being used.",
+      error,
+      payload: {
+        startArea: startArea.id,
+        nights,
+      },
+    });
+  }
+
+  return buildFallbackLodgingSummary({
+    preferences,
+    startArea,
+    reason: "live-rates-unavailable",
+  });
 };
 
 const fetchVisitKoreaPlaces = async (): Promise<Place[]> => {
@@ -79,7 +463,7 @@ const fetchVisitKoreaPlaces = async (): Promise<Place[]> => {
     }
 
     const places: Place[] = items
-      .filter((item) => item?.mapx && item?.mapy && item?.title)
+      .filter((item) => item?.mapx && item?.mapy && item?.title && item?.contenttypeid !== "32")
       .map((item, index) => {
         const categories = [...mapTourCategory(item.contenttypeid)];
 
@@ -303,6 +687,42 @@ const extractRouteLegDebug = (itinerary: Itinerary) =>
     }))
   );
 
+const calculateItineraryRouteCostKrw = (itinerary: Itinerary) =>
+  itinerary.days.reduce(
+    (total, day) =>
+      total +
+      day.stops.reduce(
+        (dayTotal, stop) =>
+          dayTotal +
+          stop.place.estimatedSpendKrw * itinerary.preferences.partySize +
+          (stop.transitFromPrevious?.estimatedFareKrw ?? 0) * itinerary.preferences.partySize,
+        0
+      ),
+    0
+  );
+
+const syncBudgetSummary = (itinerary: Itinerary): Itinerary => {
+  const estimatedTotalKrw = Math.round(
+    calculateItineraryRouteCostKrw(itinerary) + (itinerary.planningMeta.lodging?.estimatedTotalKrw ?? 0)
+  );
+  const baseStrategy = itinerary.planningMeta.debug?.selectedStrategy ?? itinerary.planningMeta.budgetSummary.strategy;
+  const strategy =
+    baseStrategy === "minimum" || estimatedTotalKrw > itinerary.preferences.totalBudgetKrw ? "minimum" : "within";
+
+  return {
+    ...itinerary,
+    planningMeta: {
+      ...itinerary.planningMeta,
+      budgetSummary: buildBudgetSummary({
+        totalBudgetKrw: itinerary.preferences.totalBudgetKrw,
+        estimatedTotalKrw,
+        partySize: itinerary.preferences.partySize,
+        strategy,
+      }),
+    },
+  };
+};
+
 const finalizePlanningDebug = ({
   itinerary,
   engine,
@@ -314,41 +734,49 @@ const finalizePlanningDebug = ({
   placesSource: PlannerPlacesSource;
   notes?: string[];
 }): Itinerary => {
-  const { liveTransitLegCount, fallbackTransitLegCount } = summarizeTransitProviders(itinerary);
-  const totalStops = itinerary.days.reduce((total, day) => total + day.stops.length, 0);
-  const nextNotes = [...new Set([...(itinerary.planningMeta.debug?.notes ?? []), ...notes])];
-  const selectedStrategy = itinerary.planningMeta.debug?.selectedStrategy ?? itinerary.planningMeta.budgetSummary.strategy;
+  const budgetReadyItinerary = syncBudgetSummary(itinerary);
+  const { liveTransitLegCount, fallbackTransitLegCount } = summarizeTransitProviders(budgetReadyItinerary);
+  const totalStops = budgetReadyItinerary.days.reduce((total, day) => total + day.stops.length, 0);
+  const nextNotes = [...new Set([...(budgetReadyItinerary.planningMeta.debug?.notes ?? []), ...notes])];
+  const selectedStrategy =
+    budgetReadyItinerary.planningMeta.budgetSummary.strategy === "minimum"
+      ? "minimum"
+      : budgetReadyItinerary.planningMeta.debug?.selectedStrategy ??
+        budgetReadyItinerary.planningMeta.budgetSummary.strategy;
 
   return {
-    ...itinerary,
+    ...budgetReadyItinerary,
     planningMeta: {
-      ...itinerary.planningMeta,
+      ...budgetReadyItinerary.planningMeta,
       debug: {
         engine,
         routeResolvedWithoutFallback:
           engine === "remote-ai" &&
           placesSource !== "seed" &&
-          itinerary.planningMeta.weatherSnapshot.source === "open-meteo" &&
+          budgetReadyItinerary.planningMeta.weatherSnapshot.source === "open-meteo" &&
           fallbackTransitLegCount === 0,
         withinBudget:
-          itinerary.planningMeta.budgetSummary.estimatedTotalKrw <= itinerary.preferences.totalBudgetKrw,
+          budgetReadyItinerary.planningMeta.budgetSummary.estimatedTotalKrw <=
+          budgetReadyItinerary.preferences.totalBudgetKrw,
         trimmedToBudget:
-          itinerary.planningMeta.debug?.trimmedToBudget ??
-          (itinerary.planningMeta.budgetSummary.strategy === "minimum"),
+          budgetReadyItinerary.planningMeta.debug?.trimmedToBudget ??
+          (budgetReadyItinerary.planningMeta.budgetSummary.strategy === "minimum"),
         selectedStrategy,
         targetStopCount:
-          itinerary.planningMeta.debug?.targetStopCount ?? totalStops,
+          budgetReadyItinerary.planningMeta.debug?.targetStopCount ?? totalStops,
         minimumStopCount:
-          itinerary.planningMeta.debug?.minimumStopCount ??
-          Math.min(totalStops, Math.max(itinerary.preferences.tripDays, Math.min(3, totalStops))),
-        finalStopCount: itinerary.planningMeta.debug?.finalStopCount ?? totalStops,
+          budgetReadyItinerary.planningMeta.debug?.minimumStopCount ??
+          Math.min(totalStops, Math.max(budgetReadyItinerary.preferences.tripDays, Math.min(3, totalStops))),
+        finalStopCount: budgetReadyItinerary.planningMeta.debug?.finalStopCount ?? totalStops,
         placesSource,
-        weatherSource: itinerary.planningMeta.weatherSnapshot.source,
+        weatherSource: budgetReadyItinerary.planningMeta.weatherSnapshot.source,
         liveTransitLegCount,
         fallbackTransitLegCount,
-        weatherValues: itinerary.planningMeta.debug?.weatherValues ?? itinerary.planningMeta.weatherSnapshot,
-        candidatePlaces: itinerary.planningMeta.debug?.candidatePlaces ?? [],
-        routeLegs: itinerary.planningMeta.debug?.routeLegs ?? extractRouteLegDebug(itinerary),
+        weatherValues:
+          budgetReadyItinerary.planningMeta.debug?.weatherValues ?? budgetReadyItinerary.planningMeta.weatherSnapshot,
+        candidatePlaces: budgetReadyItinerary.planningMeta.debug?.candidatePlaces ?? [],
+        routeLegs:
+          budgetReadyItinerary.planningMeta.debug?.routeLegs ?? extractRouteLegDebug(budgetReadyItinerary),
         notes: nextNotes,
       },
     },
@@ -421,6 +849,10 @@ const collectPlanningWarnings = (itinerary: Itinerary) => {
     warnings.push(itinerary.planningMeta.budgetSummary.summary[locale]);
   }
 
+  if (itinerary.planningMeta.lodging?.source === "fallback" && itinerary.planningMeta.lodging.note) {
+    warnings.push(itinerary.planningMeta.lodging.note[locale]);
+  }
+
   return warnings;
 };
 
@@ -429,7 +861,8 @@ export const generateItinerary = async (
 ): Promise<GenerateItineraryResponse> => {
   const normalizedPreferences = normalizeTripPreferences(preferences);
   const warnings: string[] = [];
-  const [candidatePlaces, weatherSnapshot] = await Promise.all([
+  const startArea = getStartAreaOrDefault(normalizedPreferences.startAreaId);
+  const [candidatePlaces, weatherSnapshot, lodging] = await Promise.all([
     fetchCandidatePlaces().catch(() => {
       warnings.push("Tour API unavailable, using seeded Busan places.");
       return {
@@ -443,6 +876,13 @@ export const generateItinerary = async (
       startAreaId: normalizedPreferences.startAreaId,
       travelDate: normalizedPreferences.travelDate,
     }),
+    resolveLodgingSummary(normalizedPreferences, startArea).catch(() =>
+      buildFallbackLodgingSummary({
+        preferences: normalizedPreferences,
+        startArea,
+        reason: "live-rates-unavailable",
+      })
+    ),
   ]);
   const places = candidatePlaces.places;
 
@@ -453,8 +893,9 @@ export const generateItinerary = async (
       payload: {
         preferences: normalizedPreferences,
         placesCount: places.length,
-        startArea: getStartAreaOrDefault(normalizedPreferences.startAreaId),
+        startArea,
         weatherSnapshot,
+        lodging,
       },
     });
 
@@ -462,8 +903,9 @@ export const generateItinerary = async (
       body: {
         preferences: normalizedPreferences,
         places,
-        startArea: getStartAreaOrDefault(normalizedPreferences.startAreaId),
+        startArea,
         weatherSnapshot,
+        lodging,
       },
     });
 
@@ -541,8 +983,9 @@ export const generateItinerary = async (
 
   const fallback = await enrichTransitLegs(
     buildFallbackItinerary(normalizedPreferences, places, {
-      startArea: getStartAreaOrDefault(normalizedPreferences.startAreaId),
+      startArea,
       engine: "local-fallback",
+      lodging,
       weatherSnapshot,
     })
   );

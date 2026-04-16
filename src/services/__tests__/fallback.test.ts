@@ -38,6 +38,27 @@ describe("service fallbacks", () => {
     expect(result.itinerary.planningMeta.debug?.candidatePlaces.length).toBeGreaterThan(0);
   });
 
+  it("adds a fallback lodging estimate for overnight trips without live stay pricing", async () => {
+    const result = await generateItinerary({
+      tripDays: 2,
+      totalBudgetKrw: 320000,
+      partySize: 2,
+      travelDate: "2026-04-16",
+      startAreaId: "seomyeon",
+      companionType: "friends",
+      interests: ["food", "night"],
+      budgetLevel: "balanced",
+      mobilityMode: "mixed",
+      accessibilityNeeds: false,
+      indoorFallback: true,
+      locale: "ko",
+    });
+
+    expect(result.itinerary.planningMeta.lodging?.source).toBe("fallback");
+    expect(result.itinerary.planningMeta.lodging?.nights).toBe(1);
+    expect(result.itinerary.planningMeta.lodging?.estimatedTotalKrw).toBeGreaterThan(0);
+  });
+
   it("requires upgrade for anonymous remote publishing", () => {
     expect(
       requiresUpgradeForRemotePublish({

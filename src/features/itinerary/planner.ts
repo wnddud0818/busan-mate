@@ -9,6 +9,7 @@ import {
   Itinerary,
   ItineraryDay,
   ItineraryStop,
+  LodgingSummary,
   Place,
   PlanningDebug,
   PlannerCandidateDebug,
@@ -232,9 +233,16 @@ const targetStopCount = (tripDays: number, totalPlaces: number) => Math.min(tota
 const minimumStopCount = (tripDays: number, totalPlaces: number) =>
   Math.min(totalPlaces, Math.max(tripDays, Math.min(3, totalPlaces)));
 
-const selectPlacesWithinBudget = (scored: ScoredPlace[], preferences: TripPreferences) => {
+const getLodgingTotalKrw = (lodging?: LodgingSummary) => lodging?.estimatedTotalKrw ?? 0;
+
+const selectPlacesWithinBudget = (
+  scored: ScoredPlace[],
+  preferences: TripPreferences,
+  lodging?: LodgingSummary
+) => {
   const targetStops = targetStopCount(preferences.tripDays, scored.length);
   const minimumStops = minimumStopCount(preferences.tripDays, scored.length);
+  const availableBudgetKrw = Math.max(0, preferences.totalBudgetKrw - getLodgingTotalKrw(lodging));
   const selected: ScoredPlace[] = [];
   let estimatedTotalKrw = 0;
   const baseTransitCostPerLeg = preferences.mobilityMode === "walk" ? 0 : 1600 * preferences.partySize;
@@ -247,7 +255,7 @@ const selectPlacesWithinBudget = (scored: ScoredPlace[], preferences: TripPrefer
     const addedCost =
       place.estimatedSpendKrw * preferences.partySize + (selected.length > 0 ? baseTransitCostPerLeg : 0);
 
-    if (estimatedTotalKrw + addedCost <= preferences.totalBudgetKrw) {
+    if (estimatedTotalKrw + addedCost <= availableBudgetKrw) {
       selected.push(place);
       estimatedTotalKrw += addedCost;
     }
@@ -263,7 +271,7 @@ const selectPlacesWithinBudget = (scored: ScoredPlace[], preferences: TripPrefer
 
       const addedCost =
         place.estimatedSpendKrw * preferences.partySize + (selected.length > 0 ? baseTransitCostPerLeg : 0);
-      if (estimatedTotalKrw + addedCost > preferences.totalBudgetKrw) {
+      if (estimatedTotalKrw + addedCost > availableBudgetKrw) {
         continue;
       }
 
@@ -736,6 +744,7 @@ const buildPlanningDebug = ({
   finalPlaces,
   days,
   estimatedTotalKrw,
+  lodging,
 }: {
   engine: PlannerEngine;
   preferences: TripPreferences;
@@ -749,6 +758,7 @@ const buildPlanningDebug = ({
   finalPlaces: ScoredPlace[];
   days: ItineraryDay[];
   estimatedTotalKrw: number;
+  lodging?: LodgingSummary;
 }): PlanningDebug => {
   const budgetSelectedIds = new Set(budgetSelection.places.map((place) => place.id));
   const finalIds = new Set(finalPlaces.map((place) => place.id));
@@ -796,6 +806,9 @@ const buildPlanningDebug = ({
       `${engine} planner debug snapshot`,
       `Selection strategy ${selectedStrategy}`,
       "Timed with lunch, dinner, and evening anchors when available.",
+      getLodgingTotalKrw(lodging) > 0
+        ? `Lodging estimate added: ${getLodgingTotalKrw(lodging)} KRW.`
+        : "No lodging estimate added.",
       trimmedCount > 0 ? `${trimmedCount} budget-selected candidates were trimmed.` : "No route trimming was required.",
     ],
   };
@@ -807,14 +820,17 @@ const buildPlanningMeta = ({
   startArea,
   weatherSnapshot,
   strategy,
+  lodging,
 }: {
   days: ItineraryDay[];
   preferences: TripPreferences;
   startArea: StartArea;
   weatherSnapshot: WeatherSnapshot;
   strategy: "within" | "minimum";
+  lodging?: LodgingSummary;
 }) => {
-  const estimatedTotalKrw = Math.round(days.reduce((total, day) => total + sumDayCost(day, preferences.partySize), 0));
+  const estimatedRouteKrw = Math.round(days.reduce((total, day) => total + sumDayCost(day, preferences.partySize), 0));
+  const estimatedTotalKrw = estimatedRouteKrw + getLodgingTotalKrw(lodging);
 
   return {
     startArea,
@@ -826,6 +842,7 @@ const buildPlanningMeta = ({
       strategy:
         strategy === "minimum" || estimatedTotalKrw > preferences.totalBudgetKrw ? "minimum" : "within",
     }),
+    lodging,
   };
 };
 
@@ -834,11 +851,15 @@ const trimRouteToBudget = ({
   preferences,
   startArea,
   locale,
+  weatherSnapshot,
+  lodging,
 }: {
   places: ScoredPlace[];
   preferences: TripPreferences;
   startArea: StartArea;
   locale: AppLocale;
+  weatherSnapshot: WeatherSnapshot;
+  lodging?: LodgingSummary;
 }) => {
   const minimumStops = minimumStopCount(preferences.tripDays, places.length);
   let working = [...places];
@@ -849,14 +870,15 @@ const trimRouteToBudget = ({
     const days = dayBuckets.map((bucket, index) => ({
       dayNumber: index + 1,
       theme: dayTheme(bucket),
-      stops: createDayStops(bucket, index, preferences, locale),
+      stops: createDayStops(bucket, index, preferences, locale, weatherSnapshot),
     }));
     const planningMeta = buildPlanningMeta({
       days,
       preferences,
       startArea,
-      weatherSnapshot: neutralWeatherSnapshot(preferences.travelDate),
+      weatherSnapshot,
       strategy,
+      lodging,
     });
 
     if (planningMeta.budgetSummary.estimatedTotalKrw <= preferences.totalBudgetKrw || working.length === minimumStops) {
@@ -888,6 +910,7 @@ export const buildFallbackItinerary = (
     weatherSnapshot?: WeatherSnapshot;
     startArea?: StartArea;
     engine?: PlannerEngine;
+    lodging?: LodgingSummary;
   }
 ): Itinerary => {
   const normalizedPreferences = normalizeTripPreferences(preferences);
@@ -895,14 +918,17 @@ export const buildFallbackItinerary = (
   const startArea = planningInput?.startArea ?? getStartAreaOrDefault(normalizedPreferences.startAreaId);
   const weatherSnapshot = planningInput?.weatherSnapshot ?? neutralWeatherSnapshot(normalizedPreferences.travelDate);
   const engine = planningInput?.engine ?? "local-fallback";
+  const lodging = planningInput?.lodging;
   const scored = scorePlaces(normalizedPreferences, candidatePlaces, { weatherSnapshot, startArea });
-  const budgetSelection = selectPlacesWithinBudget(scored, normalizedPreferences);
+  const budgetSelection = selectPlacesWithinBudget(scored, normalizedPreferences, lodging);
   const orderedSelection = orderPlacesForRoute(budgetSelection.places, startArea);
   const trimmedSelection = trimRouteToBudget({
     places: orderedSelection,
     preferences: normalizedPreferences,
     startArea,
     locale,
+    weatherSnapshot,
+    lodging,
   });
   const finalStrategy =
     budgetSelection.strategy === "minimum" || trimmedSelection.strategy === "minimum" ? "minimum" : "within";
@@ -918,6 +944,7 @@ export const buildFallbackItinerary = (
     startArea,
     weatherSnapshot,
     strategy: finalStrategy,
+    lodging,
   });
   const planningDebug = buildPlanningDebug({
     engine,
@@ -929,6 +956,7 @@ export const buildFallbackItinerary = (
     finalPlaces: trimmedSelection.places,
     days,
     estimatedTotalKrw: planningMeta.budgetSummary.estimatedTotalKrw,
+    lodging,
   });
   const titleAnchor = trimmedSelection.places[0]?.name ?? startArea.name;
 
@@ -979,6 +1007,7 @@ export const buildIndoorFallback = (
     ...buildFallbackItinerary(preferences, indoorPlaces, {
       startArea: itinerary.planningMeta?.startArea ?? startAreas[0],
       engine: "indoor-fallback",
+      lodging: itinerary.planningMeta?.lodging,
       weatherSnapshot: {
         status: "live",
         source: "fallback",

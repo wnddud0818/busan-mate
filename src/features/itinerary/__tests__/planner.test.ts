@@ -32,6 +32,33 @@ describe("planner", () => {
     expect(itinerary.planningMeta.debug?.routeLegs.length).toBeGreaterThan(0);
   });
 
+  it("adds lodging costs into the final budget summary when provided", () => {
+    const itinerary = buildFallbackItinerary(preferences, seedPlaces, {
+      lodging: {
+        source: "fallback",
+        nights: 1,
+        estimatedNightlyRateKrw: 120000,
+        estimatedRoomCount: 1,
+        estimatedTotalKrw: 120000,
+      },
+    });
+    const routeTotalKrw = itinerary.days.reduce(
+      (total, day) =>
+        total +
+        day.stops.reduce(
+          (dayTotal, stop) =>
+            dayTotal +
+            stop.place.estimatedSpendKrw * itinerary.preferences.partySize +
+            (stop.transitFromPrevious?.estimatedFareKrw ?? 0) * itinerary.preferences.partySize,
+          0
+        ),
+      0
+    );
+
+    expect(itinerary.planningMeta.lodging?.estimatedTotalKrw).toBe(120000);
+    expect(itinerary.planningMeta.budgetSummary.estimatedTotalKrw).toBe(routeTotalKrw + 120000);
+  });
+
   it("keeps the generated route within the total budget when possible", () => {
     const itinerary = buildFallbackItinerary(preferences, seedPlaces);
     expect(itinerary.planningMeta.budgetSummary.estimatedTotalKrw).toBeLessThanOrEqual(

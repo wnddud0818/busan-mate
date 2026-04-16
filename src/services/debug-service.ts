@@ -163,8 +163,10 @@ export const logPriceSnapshot = ({
 }) => {
   const locale = itinerary.locale;
   const budgetSummary = itinerary.planningMeta?.budgetSummary;
+  const lodging = itinerary.planningMeta?.lodging ?? null;
   const pricePayload = {
     budgetSummary,
+    lodging,
     days: itinerary.days.map((day) => ({
       dayNumber: day.dayNumber,
       totalPlaceSpendKrw: day.stops.reduce((total, stop) => total + stop.place.estimatedSpendKrw, 0),
