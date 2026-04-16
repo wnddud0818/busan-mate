@@ -1,3 +1,4 @@
+import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
@@ -36,25 +37,21 @@ export default function LiveGuidePage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const currentStop = useMemo(() => {
-    if (!itinerary || !activeSession) {
-      return undefined;
-    }
-
+    if (!itinerary || !activeSession) return undefined;
     return itinerary.days[activeSession.currentDay - 1]?.stops[activeSession.currentStopOrder - 1];
   }, [activeSession, itinerary]);
 
   const nextStop = useMemo(() => {
-    if (!itinerary || !activeSession) {
-      return undefined;
-    }
-
+    if (!itinerary || !activeSession) return undefined;
     return itinerary.days[activeSession.currentDay - 1]?.stops[activeSession.currentStopOrder];
   }, [activeSession, itinerary]);
 
   if (!activeSession || params.sessionId !== activeSession.id || !itinerary || !currentStop) {
     return (
-      <Screen title="Live guide">
-        <Text style={{ color: "white" }}>No active session.</Text>
+      <Screen title={locale === "ko" ? "실시간 가이드" : "Live guide"} showBack>
+        <Text style={{ color: colors.mist }}>
+          {locale === "ko" ? "활성 세션이 없어요." : "No active session."}
+        </Text>
       </Screen>
     );
   }
@@ -67,25 +64,21 @@ export default function LiveGuidePage() {
 
   const enableGuidance = async () => {
     const granted = await requestLiveGuidePermissions();
-    const nextSession = {
-      ...activeSession,
-      locationConsent: granted,
-    };
-
+    const nextSession = { ...activeSession, locationConsent: granted };
     setLocationConsent(granted);
-    const result = await syncLiveSession({
-      itinerary,
-      session: nextSession,
-      userProfile: profile,
-    });
-
+    const result = await syncLiveSession({ itinerary, session: nextSession, userProfile: profile });
     await persistSyncedSession(result.itinerary, result.session);
-
     if (granted) {
       await startBackgroundTracking(result.itinerary, result.session);
-      Alert.alert("Busan Mate", locale === "ko" ? "실시간 위치 가이드가 켜졌어요." : "Live location guidance is now on.");
+      Alert.alert(
+        "Busan Mate",
+        locale === "ko" ? "실시간 위치 가이드가 켜졌어요." : "Live location guidance is now on."
+      );
     } else {
-      Alert.alert("Busan Mate", locale === "ko" ? "수동 가이드 모드로 계속 진행해요." : "Continuing in manual guide mode.");
+      Alert.alert(
+        "Busan Mate",
+        locale === "ko" ? "수동 가이드 모드로 계속해요." : "Continuing in manual guide mode."
+      );
     }
   };
 
@@ -94,7 +87,9 @@ export default function LiveGuidePage() {
       const snapshot = await evaluateCurrentLocation(itinerary, activeSession);
       const nextSession = {
         ...activeSession,
-        lastAlertAt: snapshot.status.shouldNotify ? new Date().toISOString() : activeSession.lastAlertAt,
+        lastAlertAt: snapshot.status.shouldNotify
+          ? new Date().toISOString()
+          : activeSession.lastAlertAt,
       };
       const result = await ingestLocationEvent({
         itinerary,
@@ -102,7 +97,6 @@ export default function LiveGuidePage() {
         event: snapshot.event,
         userProfile: profile,
       });
-
       addLocationEvent(result.event);
       updateSession(result.session);
       await saveTrackingState(itinerary, result.session);
@@ -115,28 +109,24 @@ export default function LiveGuidePage() {
         );
       } else if (snapshot.status.shouldNotify) {
         setStatusMessage(
-          locale === "ko" ? "다음 장소로 이동할 시간이 가까워요." : "It is almost time to leave for the next stop."
+          locale === "ko" ? "다음 장소로 이동할 시간이 다가왔어요." : "Almost time to leave for the next stop."
         );
       } else {
-        setStatusMessage(locale === "ko" ? "현재 루트를 잘 따라가고 있어요." : "You are tracking the route well.");
+        setStatusMessage(
+          locale === "ko" ? "현재 루트를 잘 따라가고 있어요." : "You are tracking the route well."
+        );
       }
     } catch {
-      setStatusMessage(locale === "ko" ? "현재 위치를 확인하지 못했어요." : "Unable to read your current location.");
+      setStatusMessage(
+        locale === "ko" ? "현재 위치를 확인하지 못했어요." : "Unable to read your current location."
+      );
     }
   };
 
   const moveToNextStop = async () => {
     const nextSession = advanceSession();
-    if (!nextSession) {
-      return;
-    }
-
-    const result = await syncLiveSession({
-      itinerary,
-      session: nextSession,
-      userProfile: profile,
-    });
-
+    if (!nextSession) return;
+    const result = await syncLiveSession({ itinerary, session: nextSession, userProfile: profile });
     if (result.session.status === "completed") {
       await stopBackgroundTracking();
       await clearTrackingState();
@@ -144,22 +134,13 @@ export default function LiveGuidePage() {
       router.replace(`/itinerary/${itinerary.id}`);
       return;
     }
-
     await persistSyncedSession(result.itinerary, result.session);
   };
 
   const endSession = async () => {
     const nextSession = completeSession();
-    if (!nextSession) {
-      return;
-    }
-
-    const result = await syncLiveSession({
-      itinerary,
-      session: nextSession,
-      userProfile: profile,
-    });
-
+    if (!nextSession) return;
+    const result = await syncLiveSession({ itinerary, session: nextSession, userProfile: profile });
     await stopBackgroundTracking();
     await clearTrackingState();
     updateSession(result.session);
@@ -175,106 +156,199 @@ export default function LiveGuidePage() {
   };
 
   return (
-    <Screen title={locale === "ko" ? "실시간 가이드" : "Live guide"} subtitle={itinerary.title[locale]}>
-      <SectionCard title={currentStop.place.name[locale]} hint={currentStop.place.description[locale]}>
-        <Text style={styles.copy}>
+    <Screen
+      title={locale === "ko" ? "실시간 가이드" : "Live guide"}
+      subtitle={itinerary.title[locale]}
+      showBack
+    >
+      {/* ── 현재 장소 ── */}
+      <SectionCard variant="highlight" title={currentStop.place.name[locale]}>
+        <Text style={styles.districtCopy}>
           {locale === "ko"
             ? `현재 ${currentStop.place.district} 구역을 안내하고 있어요.`
             : `Currently guiding you through ${currentStop.place.district}.`}
         </Text>
         {nextStop ? (
-          <Text style={styles.next}>
-            {locale === "ko" ? "다음 이동" : "Next move"}: {nextStop.place.name[locale]}
-          </Text>
+          <View style={styles.nextRow}>
+            <Feather name="arrow-right-circle" size={14} color={colors.mint} />
+            <Text style={styles.nextCopy}>
+              {locale === "ko" ? "다음" : "Next"}:{" "}
+              <Text style={styles.nextName}>{nextStop.place.name[locale]}</Text>
+            </Text>
+          </View>
         ) : null}
       </SectionCard>
 
+      {/* ── 가이드 액션 ── */}
       <SectionCard title={locale === "ko" ? "가이드 기능" : "Guide actions"}>
-        <View style={styles.buttonGrid}>
-          <Pressable style={styles.primaryButton} onPress={enableGuidance}>
-            <Text style={styles.primaryText}>{locale === "ko" ? "위치 가이드 켜기" : "Enable location guide"}</Text>
-          </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={checkLocationNow}>
-            <Text style={styles.secondaryText}>{locale === "ko" ? "지금 위치 확인" : "Check my location"}</Text>
-          </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={moveToNextStop}>
-            <Text style={styles.secondaryText}>{locale === "ko" ? "다음 이동" : "Next move"}</Text>
-          </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={rerouteIndoors}>
-            <Text style={styles.secondaryText}>{locale === "ko" ? "실내 대체 루트" : "Indoor fallback route"}</Text>
-          </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={endSession}>
-            <Text style={styles.secondaryText}>{locale === "ko" ? "세션 종료" : "End session"}</Text>
-          </Pressable>
-          <Pressable
-            style={styles.secondaryButton}
-            onPress={() =>
-              openNavigationLink(
-                currentStop.place.bookingUrl ??
-                  `https://maps.google.com/?q=${currentStop.place.coordinates.latitude},${currentStop.place.coordinates.longitude}`
-              )
-            }
-          >
-            <Text style={styles.secondaryText}>{locale === "ko" ? "지도 / 예약 열기" : "Open maps / booking"}</Text>
-          </Pressable>
+        {/* 주요 액션 */}
+        <Pressable style={styles.primaryBtn} onPress={enableGuidance}>
+          <Feather name="radio" size={16} color={colors.navy} />
+          <Text style={styles.primaryBtnText}>
+            {locale === "ko" ? "위치 가이드 켜기" : "Enable location guide"}
+          </Text>
+        </Pressable>
+
+        {/* 보조 액션 그리드 */}
+        <View style={styles.actionGrid}>
+          {[
+            {
+              icon: "crosshair" as const,
+              label: locale === "ko" ? "지금 위치 확인" : "Check location",
+              onPress: checkLocationNow,
+            },
+            {
+              icon: "skip-forward" as const,
+              label: locale === "ko" ? "다음 이동" : "Next move",
+              onPress: moveToNextStop,
+            },
+            {
+              icon: "home" as const,
+              label: locale === "ko" ? "실내 대체" : "Indoor fallback",
+              onPress: rerouteIndoors,
+            },
+            {
+              icon: "map" as const,
+              label: locale === "ko" ? "지도 / 예약" : "Maps / booking",
+              onPress: () =>
+                openNavigationLink(
+                  currentStop.place.bookingUrl ??
+                    `https://maps.google.com/?q=${currentStop.place.coordinates.latitude},${currentStop.place.coordinates.longitude}`
+                ),
+            },
+          ].map(({ icon, label, onPress }) => (
+            <Pressable key={icon} style={styles.gridBtn} onPress={onPress}>
+              <Feather name={icon} size={16} color={colors.cloud} />
+              <Text style={styles.gridBtnText}>{label}</Text>
+            </Pressable>
+          ))}
         </View>
+
+        {/* 세션 종료 */}
+        <Pressable style={styles.dangerBtn} onPress={endSession}>
+          <Feather name="x-circle" size={15} color={colors.error} />
+          <Text style={styles.dangerBtnText}>
+            {locale === "ko" ? "세션 종료" : "End session"}
+          </Text>
+        </Pressable>
       </SectionCard>
 
+      {/* ── 상태 메시지 ── */}
       {statusMessage ? (
         <SectionCard>
-          <Text style={styles.copy}>{statusMessage}</Text>
+          <View style={styles.statusRow}>
+            <Feather name="info" size={14} color={colors.mint} />
+            <Text style={styles.statusText}>{statusMessage}</Text>
+          </View>
         </SectionCard>
       ) : null}
 
-      <Pressable style={styles.chatButton} onPress={() => router.push(`/trip/${activeSession.id}/guide`)}>
-        <Text style={styles.chatText}>{locale === "ko" ? "가이드에게 질문하기" : "Ask the guide"}</Text>
+      {/* ── AI 가이드 채팅 ── */}
+      <Pressable style={styles.chatBtn} onPress={() => router.push(`/trip/${activeSession.id}/guide`)}>
+        <Feather name="message-circle" size={18} color={colors.navy} />
+        <Text style={styles.chatBtnText}>
+          {locale === "ko" ? "가이드에게 질문하기" : "Ask the guide"}
+        </Text>
       </Pressable>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  copy: {
-    color: "rgba(248,251,253,0.8)",
-    lineHeight: 20,
+  districtCopy: {
+    color: "rgba(248,251,253,0.82)",
+    fontSize: 14,
+    lineHeight: 21,
   },
-  next: {
+  nextRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  nextCopy: {
+    color: colors.mist,
+    fontSize: 13,
+  },
+  nextName: {
     color: colors.mint,
     fontWeight: "700",
   },
-  buttonGrid: {
-    gap: spacing.sm,
-  },
-  primaryButton: {
+  primaryBtn: {
     borderRadius: radii.md,
     backgroundColor: colors.coral,
     paddingVertical: spacing.md,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
   },
-  primaryText: {
+  primaryBtnText: {
     color: colors.navy,
     fontWeight: "800",
+    fontSize: 15,
   },
-  secondaryButton: {
+  actionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  gridBtn: {
+    flex: 1,
+    minWidth: "45%",
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: "rgba(255,255,255,0.06)",
     paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
     alignItems: "center",
+    gap: 6,
   },
-  secondaryText: {
+  gridBtnText: {
     color: colors.cloud,
+    fontSize: 12,
     fontWeight: "700",
+    textAlign: "center",
   },
-  chatButton: {
+  dangerBtn: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: "rgba(255,90,90,0.28)",
+    backgroundColor: "rgba(255,90,90,0.08)",
+    paddingVertical: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  dangerBtnText: {
+    color: colors.error,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  statusText: {
+    color: "rgba(248,251,253,0.82)",
+    flex: 1,
+    lineHeight: 20,
+    fontSize: 14,
+  },
+  chatBtn: {
     borderRadius: radii.md,
     backgroundColor: colors.sand,
     paddingVertical: spacing.md,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
   },
-  chatText: {
+  chatBtnText: {
     color: colors.navy,
-    fontWeight: "800",
+    fontWeight: "900",
+    fontSize: 16,
   },
 });

@@ -1,11 +1,13 @@
+import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { Text } from "react-native";
+import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 
 import { Screen } from "../../src/components/common/screen";
 import { SectionCard } from "../../src/components/common/section-card";
 import { ItineraryCard } from "../../src/components/itinerary/itinerary-card";
 import { useAppStore } from "../../src/stores/app-store";
+import { colors, spacing } from "../../src/theme/tokens";
 
 export default function LibraryTab() {
   const locale = useAppStore((state) => state.locale);
@@ -15,19 +17,45 @@ export default function LibraryTab() {
 
   return (
     <Screen title={t("library.title")} subtitle={t("library.subtitle")}>
+      {/* 활성 세션 배너 */}
       {activeSession ? (
-        <SectionCard title={locale === "ko" ? "활성 여행 세션" : "Active live session"}>
-          <Text style={{ color: "white" }}>
-            {locale === "ko"
-              ? `현재 Day ${activeSession.currentDay}, Stop ${activeSession.currentStopOrder} 가이드 진행 중`
-              : `Currently guiding Day ${activeSession.currentDay}, Stop ${activeSession.currentStopOrder}`}
-          </Text>
+        <SectionCard
+          variant="highlight"
+          title={locale === "ko" ? "진행 중인 여행" : "Active trip session"}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Feather name="navigation" size={14} color={colors.mint} />
+            <Text style={{ color: colors.cloud, fontSize: 14, flex: 1, lineHeight: 20 }}>
+              {locale === "ko"
+                ? `Day ${activeSession.currentDay}, Stop ${activeSession.currentStopOrder} 안내 진행 중`
+                : `Guiding Day ${activeSession.currentDay}, Stop ${activeSession.currentStopOrder}`}
+            </Text>
+          </View>
         </SectionCard>
       ) : null}
 
+      {/* 빈 상태 */}
       {itineraries.length === 0 ? (
         <SectionCard>
-          <Text style={{ color: "white" }}>{t("library.empty")}</Text>
+          <View
+            style={{
+              alignItems: "center",
+              paddingVertical: spacing.xl,
+              gap: spacing.md,
+            }}
+          >
+            <Feather name="map" size={44} color="rgba(248,251,253,0.18)" />
+            <Text
+              style={{
+                color: colors.mist,
+                textAlign: "center",
+                lineHeight: 22,
+                fontSize: 14,
+              }}
+            >
+              {t("library.empty")}
+            </Text>
+          </View>
         </SectionCard>
       ) : (
         itineraries.map((itinerary) => (

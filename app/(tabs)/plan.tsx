@@ -30,32 +30,37 @@ export default function PlanTab() {
 
   return (
     <Screen title={t("plan.title")} subtitle={t("plan.subtitle")}>
+      {/* 날씨·주의 알림 */}
       {notices.length > 0 ? (
-        <SectionCard>
+        <SectionCard variant="warning">
           {notices.map((notice) => (
-            <Text key={notice} style={{ color: colors.sand, lineHeight: 20 }}>
+            <Text key={notice} style={{ color: colors.sand, lineHeight: 21, fontSize: 14 }}>
               {notice}
             </Text>
           ))}
         </SectionCard>
       ) : null}
 
+      {/* 일정 생성 폼 */}
       <TripPreferencesForm
         locale={locale}
         isSubmitting={itineraryMutation.isPending}
         onSubmit={(values) => itineraryMutation.mutate(values)}
       />
 
-      <SectionCard title={t("plan.recent")} hint={t("common.fallback")}>
-        {itineraries.slice(0, 3).map((itinerary) => (
-          <ItineraryCard
-            key={itinerary.id}
-            itinerary={itinerary}
-            locale={locale}
-            onPress={() => router.push(`/itinerary/${itinerary.id}`)}
-          />
-        ))}
-      </SectionCard>
+      {/* 최근 생성 일정 */}
+      {itineraries.length > 0 ? (
+        <SectionCard title={t("plan.recent")} hint={t("common.fallback")}>
+          {itineraries.slice(0, 3).map((itinerary) => (
+            <ItineraryCard
+              key={itinerary.id}
+              itinerary={itinerary}
+              locale={locale}
+              onPress={() => router.push(`/itinerary/${itinerary.id}`)}
+            />
+          ))}
+        </SectionCard>
+      ) : null}
     </Screen>
   );
 }

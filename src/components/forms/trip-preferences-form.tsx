@@ -14,7 +14,6 @@ import { AppLocale, InterestTag, TripPreferences } from "../../types/domain";
 import { formatKrwCompact } from "../../utils/currency";
 import { colors, radii, spacing } from "../../theme/tokens";
 import { Pill } from "../common/pill";
-import { SectionCard } from "../common/section-card";
 
 const optionLabel = {
   tripDays: {
@@ -52,7 +51,9 @@ const optionLabel = {
 
 const budgetQuickPicks = [120000, 200000, 300000, 450000];
 const partyQuickPicks = [1, 2, 3, 4];
-const dateChoices = Array.from({ length: 7 }, (_, index) => format(addDays(new Date(), index), "yyyy-MM-dd"));
+const dateChoices = Array.from({ length: 7 }, (_, index) =>
+  format(addDays(new Date(), index), "yyyy-MM-dd")
+);
 
 type FormValues = z.infer<typeof tripPreferencesSchema>;
 
@@ -66,7 +67,7 @@ const formatDateLabel = (value: string, locale: AppLocale) => {
   const date = new Date(`${value}T00:00:00+09:00`);
   const month = date.getMonth() + 1;
   const day = date.getDate();
-  return locale === "ko" ? `${month}/${day}` : `${month}/${day}`;
+  return `${month}/${day}`;
 };
 
 const numericValue = (text: string) => {
@@ -108,19 +109,11 @@ export const TripPreferencesForm = ({
   const tripDays = watch("tripDays");
   const travelDate = watch("travelDate");
   const startAreaId = watch("startAreaId");
-  const derivedBudgetLevel = deriveBudgetLevel({
-    totalBudgetKrw,
-    partySize,
-    tripDays,
-  });
+  const derivedBudgetLevel = deriveBudgetLevel({ totalBudgetKrw, partySize, tripDays });
 
   const weatherQuery = useQuery({
     queryKey: ["weather-preview", startAreaId, travelDate],
-    queryFn: () =>
-      fetchWeatherSnapshot({
-        startAreaId,
-        travelDate,
-      }),
+    queryFn: () => fetchWeatherSnapshot({ startAreaId, travelDate }),
     enabled: Boolean(startAreaId && travelDate),
   });
 
@@ -128,49 +121,60 @@ export const TripPreferencesForm = ({
     const next = selectedInterests.includes(interest)
       ? selectedInterests.filter((item) => item !== interest)
       : [...selectedInterests, interest];
-
     setValue("interests", next.length > 0 ? next : [interest]);
   };
 
   const submitForm = (values: FormValues) =>
-    onSubmit({
-      ...values,
-      locale,
-      budgetLevel: deriveBudgetLevel(values),
-    });
+    onSubmit({ ...values, locale, budgetLevel: deriveBudgetLevel(values) });
 
   return (
     <View style={styles.wrapper}>
-      <SectionCard
-        title={locale === "ko" ? "예산 우선 플랜" : "Budget-first planning"}
-        hint={step === 1 ? "1 / 2" : "2 / 2"}
-      >
-        <View style={styles.stepRow}>
-          <View style={[styles.stepBadge, step === 1 && styles.stepBadgeActive]}>
-            <Text style={[styles.stepBadgeText, step === 1 && styles.stepBadgeTextActive]}>1</Text>
-          </View>
-          <View style={styles.stepDivider} />
-          <View style={[styles.stepBadge, step === 2 && styles.stepBadgeActive]}>
-            <Text style={[styles.stepBadgeText, step === 2 && styles.stepBadgeTextActive]}>2</Text>
-          </View>
+      {/* ── 스텝 헤더 ── */}
+      <View style={styles.stepHeader}>
+        <Text style={styles.formTitle}>
+          {locale === "ko" ? "예산 우선 플랜" : "Budget-first planning"}
+        </Text>
+        {/* 진행 바 */}
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, step === 2 && styles.progressFull]} />
         </View>
+        <View style={styles.stepRow}>
+          {[1, 2].map((n) => (
+            <View key={n} style={[styles.stepBadge, step >= n && styles.stepBadgeActive]}>
+              <Text style={[styles.stepBadgeText, step >= n && styles.stepBadgeTextActive]}>
+                {n}
+              </Text>
+            </View>
+          ))}
+          <Text style={styles.stepHint}>
+            {step === 1
+              ? locale === "ko" ? "예산 · 날짜 · 출발지" : "Budget · Date · Start"
+              : locale === "ko" ? "일정 · 관심사 · 이동" : "Duration · Interests · Mobility"}
+          </Text>
+        </View>
+      </View>
 
+      {/* ── 카드 ── */}
+      <View style={styles.card}>
         {step === 1 ? (
           <View style={styles.block}>
+            {/* 총 예산 */}
             <Controller
               control={control}
               name="totalBudgetKrw"
               render={({ field: { onChange, value } }) => (
                 <View style={styles.field}>
-                  <Text style={styles.label}>{locale === "ko" ? "총 여행 예산" : "Total trip budget"}</Text>
+                  <Text style={styles.label}>
+                    {locale === "ko" ? "총 여행 예산" : "Total trip budget"}
+                  </Text>
                   <TextInput
                     nativeID="trip-budget-input"
                     value={value ? String(value) : ""}
                     onChangeText={(text) => onChange(numericValue(text))}
                     style={styles.input}
                     keyboardType="number-pad"
-                    placeholder={locale === "ko" ? "예: 200000" : "Example: 200000"}
-                    placeholderTextColor="rgba(248,251,253,0.45)"
+                    placeholder={locale === "ko" ? "예: 200000" : "e.g. 200000"}
+                    placeholderTextColor={colors.fog}
                   />
                   <View style={styles.rowWrap}>
                     {budgetQuickPicks.map((budget) => (
@@ -186,26 +190,29 @@ export const TripPreferencesForm = ({
               )}
             />
 
+            {/* 인원수 */}
             <Controller
               control={control}
               name="partySize"
               render={({ field: { onChange, value } }) => (
                 <View style={styles.field}>
-                  <Text style={styles.label}>{locale === "ko" ? "인원수" : "Party size"}</Text>
+                  <Text style={styles.label}>
+                    {locale === "ko" ? "인원수" : "Party size"}
+                  </Text>
                   <TextInput
                     nativeID="trip-party-size-input"
                     value={value ? String(value) : ""}
                     onChangeText={(text) => onChange(Math.max(1, numericValue(text)))}
                     style={styles.input}
                     keyboardType="number-pad"
-                    placeholder={locale === "ko" ? "예: 2" : "Example: 2"}
-                    placeholderTextColor="rgba(248,251,253,0.45)"
+                    placeholder={locale === "ko" ? "예: 2" : "e.g. 2"}
+                    placeholderTextColor={colors.fog}
                   />
                   <View style={styles.rowWrap}>
                     {partyQuickPicks.map((count) => (
                       <Pill
                         key={count}
-                        label={locale === "ko" ? `${count}명` : `${count} people`}
+                        label={locale === "ko" ? `${count}명` : `${count}p`}
                         selected={value === count}
                         onPress={() => onChange(count)}
                       />
@@ -215,8 +222,11 @@ export const TripPreferencesForm = ({
               )}
             />
 
+            {/* 여행 날짜 */}
             <View style={styles.field}>
-              <Text style={styles.label}>{locale === "ko" ? "여행 날짜" : "Travel date"}</Text>
+              <Text style={styles.label}>
+                {locale === "ko" ? "여행 날짜" : "Travel date"}
+              </Text>
               <Controller
                 control={control}
                 name="travelDate"
@@ -228,7 +238,7 @@ export const TripPreferencesForm = ({
                       onChangeText={onChange}
                       style={styles.input}
                       placeholder="YYYY-MM-DD"
-                      placeholderTextColor="rgba(248,251,253,0.45)"
+                      placeholderTextColor={colors.fog}
                     />
                     <View style={styles.rowWrap}>
                       {dateChoices.map((dateValue) => (
@@ -245,8 +255,11 @@ export const TripPreferencesForm = ({
               />
             </View>
 
+            {/* 출발 지역 */}
             <View style={styles.field}>
-              <Text style={styles.label}>{locale === "ko" ? "출발 지역" : "Starting area"}</Text>
+              <Text style={styles.label}>
+                {locale === "ko" ? "출발 지역" : "Starting area"}
+              </Text>
               <View style={styles.rowWrap}>
                 {startAreas.map((area) => (
                   <Pill
@@ -259,161 +272,285 @@ export const TripPreferencesForm = ({
               </View>
             </View>
 
+            {/* 예산 감도 프리뷰 */}
             <View style={styles.previewCard}>
-              <Text style={styles.previewTitle}>
-                {locale === "ko" ? "현재 예산 감도" : "Derived budget level"}
+              <Text style={styles.previewLabel}>
+                {locale === "ko" ? "예산 감도" : "Budget level"}
               </Text>
-              <Text style={styles.previewValue}>{makeBudgetLabel(derivedBudgetLevel)[locale]}</Text>
+              <Text style={styles.previewValue}>
+                {makeBudgetLabel(derivedBudgetLevel)[locale]}
+              </Text>
               <Text style={styles.previewHint}>
                 {locale === "ko"
-                  ? `총 ${formatKrwCompact(totalBudgetKrw, locale)} / ${partySize}명 / ${tripDays}일 기준`
-                  : `${formatKrwCompact(totalBudgetKrw, locale)} for ${partySize} travelers over ${tripDays} days`}
+                  ? `총 ${formatKrwCompact(totalBudgetKrw, locale)} / ${partySize}명 / ${tripDays}일`
+                  : `${formatKrwCompact(totalBudgetKrw, locale)} for ${partySize} pax / ${tripDays} days`}
               </Text>
             </View>
 
+            {/* 날씨 프리뷰 */}
             {weatherQuery.isLoading ? (
               <View style={styles.previewCard}>
-                <Text style={styles.previewTitle}>{locale === "ko" ? "날씨 미리보기" : "Weather preview"}</Text>
+                <Text style={styles.previewLabel}>
+                  {locale === "ko" ? "날씨 미리보기" : "Weather preview"}
+                </Text>
                 <Text style={styles.previewHint}>
-                  {locale === "ko" ? "예보를 불러오는 중..." : "Loading forecast..."}
+                  {locale === "ko" ? "예보 불러오는 중..." : "Loading forecast..."}
                 </Text>
               </View>
             ) : weatherQuery.data ? (
-              <View style={styles.previewCard}>
-                <Text style={styles.previewTitle}>{locale === "ko" ? "날씨 미리보기" : "Weather preview"}</Text>
-                <Text style={styles.previewValue}>{weatherQuery.data.summary[locale]}</Text>
+              <View style={[styles.previewCard, styles.weatherCard]}>
+                <Text style={styles.previewLabel}>
+                  {locale === "ko" ? "날씨 미리보기" : "Weather preview"}
+                </Text>
+                <Text style={styles.previewValue}>
+                  {weatherQuery.data.summary[locale]}
+                </Text>
                 {typeof weatherQuery.data.temperatureMaxC === "number" ? (
                   <Text style={styles.previewHint}>
                     {locale === "ko"
-                      ? `최고 ${weatherQuery.data.temperatureMaxC}° / 강수확률 ${weatherQuery.data.precipitationProbabilityMax ?? 0}%`
+                      ? `최고 ${weatherQuery.data.temperatureMaxC}° / 강수 ${weatherQuery.data.precipitationProbabilityMax ?? 0}%`
                       : `High ${weatherQuery.data.temperatureMaxC}° / Rain ${weatherQuery.data.precipitationProbabilityMax ?? 0}%`}
                   </Text>
                 ) : null}
               </View>
             ) : null}
 
-            <Pressable onPress={handleSubmit(() => setStep(2))} style={styles.submit}>
-              <Text style={styles.submitText}>{locale === "ko" ? "취향 설정으로 이동" : "Continue to preferences"}</Text>
+            <Pressable onPress={handleSubmit(() => setStep(2))} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>
+                {locale === "ko" ? "취향 설정으로 →" : "Continue to preferences →"}
+              </Text>
             </Pressable>
           </View>
         ) : (
           <View style={styles.block}>
-            <Text style={styles.label}>{locale === "ko" ? "여행 기간" : "Trip length"}</Text>
-            <View style={styles.rowWrap}>
-              {[1, 2, 3].map((day) => (
-                <Pill
-                  key={day}
-                  label={localized("tripDays", String(day) as keyof typeof optionLabel.tripDays, locale)}
-                  selected={tripDays === day}
-                  onPress={() => setValue("tripDays", day)}
-                />
-              ))}
+            {/* 여행 기간 */}
+            <View style={styles.field}>
+              <Text style={styles.label}>
+                {locale === "ko" ? "여행 기간" : "Trip length"}
+              </Text>
+              <View style={styles.rowWrap}>
+                {[1, 2, 3].map((day) => (
+                  <Pill
+                    key={day}
+                    label={localized(
+                      "tripDays",
+                      String(day) as keyof typeof optionLabel.tripDays,
+                      locale
+                    )}
+                    selected={tripDays === day}
+                    onPress={() => setValue("tripDays", day)}
+                  />
+                ))}
+              </View>
             </View>
 
-            <Text style={styles.label}>{locale === "ko" ? "동행 유형" : "Companion"}</Text>
-            <View style={styles.rowWrap}>
-              {(["solo", "couple", "family", "friends"] as const).map((value) => (
-                <Pill
-                  key={value}
-                  label={localized("companionType", value, locale)}
-                  selected={watch("companionType") === value}
-                  onPress={() => setValue("companionType", value)}
-                />
-              ))}
+            {/* 동행 유형 */}
+            <View style={styles.field}>
+              <Text style={styles.label}>
+                {locale === "ko" ? "동행 유형" : "Companion"}
+              </Text>
+              <View style={styles.rowWrap}>
+                {(["solo", "couple", "family", "friends"] as const).map((value) => (
+                  <Pill
+                    key={value}
+                    label={localized("companionType", value, locale)}
+                    selected={watch("companionType") === value}
+                    onPress={() => setValue("companionType", value)}
+                  />
+                ))}
+              </View>
             </View>
 
-            <Text style={styles.label}>{locale === "ko" ? "관심사" : "Interests"}</Text>
-            <View style={styles.rowWrap}>
-              {(["food", "culture", "nature", "photospot", "shopping", "history", "night", "healing"] as const).map(
-                (interest) => (
+            {/* 관심사 */}
+            <View style={styles.field}>
+              <Text style={styles.label}>
+                {locale === "ko" ? "관심사" : "Interests"}
+              </Text>
+              <View style={styles.rowWrap}>
+                {(
+                  [
+                    "food",
+                    "culture",
+                    "nature",
+                    "photospot",
+                    "shopping",
+                    "history",
+                    "night",
+                    "healing",
+                  ] as const
+                ).map((interest) => (
                   <Pill
                     key={interest}
                     label={localized("interests", interest, locale)}
                     selected={selectedInterests.includes(interest)}
                     onPress={() => toggleInterest(interest)}
                   />
-                )
-              )}
+                ))}
+              </View>
             </View>
 
-            <Text style={styles.label}>{locale === "ko" ? "이동 성향" : "Mobility"}</Text>
-            <View style={styles.rowWrap}>
-              {(["transit", "walk", "mixed"] as const).map((value) => (
-                <Pill
-                  key={value}
-                  label={localized("mobilityMode", value, locale)}
-                  selected={watch("mobilityMode") === value}
-                  onPress={() => setValue("mobilityMode", value)}
-                />
-              ))}
+            {/* 이동 성향 */}
+            <View style={styles.field}>
+              <Text style={styles.label}>
+                {locale === "ko" ? "이동 성향" : "Mobility"}
+              </Text>
+              <View style={styles.rowWrap}>
+                {(["transit", "walk", "mixed"] as const).map((value) => (
+                  <Pill
+                    key={value}
+                    label={localized("mobilityMode", value, locale)}
+                    selected={watch("mobilityMode") === value}
+                    onPress={() => setValue("mobilityMode", value)}
+                  />
+                ))}
+              </View>
             </View>
 
+            {/* 무장애 우선 */}
             <Controller
               control={control}
               name="accessibilityNeeds"
               render={({ field: { onChange, value } }) => (
                 <View style={styles.switchRow}>
                   <View style={styles.switchCopy}>
-                    <Text style={styles.label}>{locale === "ko" ? "무장애 우선" : "Accessibility first"}</Text>
-                    <Text style={styles.hint}>
+                    <Text style={styles.label}>
+                      {locale === "ko" ? "무장애 우선" : "Accessibility first"}
+                    </Text>
+                    <Text style={styles.switchHint}>
                       {locale === "ko"
-                        ? "유모차나 휠체어 동선이 쉬운 장소를 우선 반영합니다."
+                        ? "유모차·휠체어 동선이 쉬운 장소를 우선 반영합니다."
                         : "Prioritize wheelchair and stroller-friendly stops."}
                     </Text>
                   </View>
-                  <Switch value={value} onValueChange={onChange} trackColor={{ true: colors.coral }} />
+                  <Switch
+                    value={value}
+                    onValueChange={onChange}
+                    trackColor={{ true: colors.coral, false: "rgba(255,255,255,0.14)" }}
+                    thumbColor={value ? colors.sand : colors.smoke}
+                  />
                 </View>
               )}
             />
 
+            {/* 실내 대체 허용 */}
             <Controller
               control={control}
               name="indoorFallback"
               render={({ field: { onChange, value } }) => (
                 <View style={styles.switchRow}>
                   <View style={styles.switchCopy}>
-                    <Text style={styles.label}>{locale === "ko" ? "실내 대체 허용" : "Indoor fallback"}</Text>
-                    <Text style={styles.hint}>
+                    <Text style={styles.label}>
+                      {locale === "ko" ? "실내 대체 허용" : "Indoor fallback"}
+                    </Text>
+                    <Text style={styles.switchHint}>
                       {locale === "ko"
                         ? "날씨가 바뀌면 실내 비중이 높은 경로로 조정합니다."
                         : "Prepare an indoor reroute when conditions change."}
                     </Text>
                   </View>
-                  <Switch value={value} onValueChange={onChange} trackColor={{ true: colors.mint }} />
+                  <Switch
+                    value={value}
+                    onValueChange={onChange}
+                    trackColor={{ true: colors.mint, false: "rgba(255,255,255,0.14)" }}
+                    thumbColor={value ? colors.navy : colors.smoke}
+                  />
                 </View>
               )}
             />
 
+            {/* 액션 버튼 */}
             <View style={styles.actionRow}>
-              <Pressable onPress={() => setStep(1)} style={styles.secondaryAction}>
-                <Text style={styles.secondaryActionText}>{locale === "ko" ? "이전" : "Back"}</Text>
+              <Pressable onPress={() => setStep(1)} style={styles.backButton}>
+                <Text style={styles.backButtonText}>
+                  {locale === "ko" ? "← 이전" : "← Back"}
+                </Text>
               </Pressable>
               <Pressable
                 onPress={handleSubmit(submitForm)}
-                style={[styles.submit, styles.flexAction, isSubmitting && styles.submitDisabled]}
+                style={[styles.primaryButton, styles.flex1, isSubmitting && styles.disabled]}
                 disabled={isSubmitting}
               >
-                <Text style={styles.submitText}>
+                <Text style={styles.primaryButtonText}>
                   {isSubmitting
-                    ? locale === "ko"
-                      ? "생성 중..."
-                      : "Generating..."
-                    : locale === "ko"
-                      ? "예산 맞춤 경로 생성"
-                      : "Generate budget-aware itinerary"}
+                    ? locale === "ko" ? "생성 중..." : "Generating..."
+                    : locale === "ko" ? "AI 일정 생성" : "Generate itinerary"}
                 </Text>
               </Pressable>
             </View>
           </View>
         )}
-      </SectionCard>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   wrapper: {
-    gap: spacing.md,
+    gap: spacing.sm,
+  },
+  stepHeader: {
+    gap: spacing.sm,
+    paddingHorizontal: 2,
+  },
+  formTitle: {
+    color: colors.cloud,
+    fontSize: 17,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+  },
+  progressTrack: {
+    height: 3,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  progressFill: {
+    width: "50%",
+    height: "100%",
+    backgroundColor: colors.coral,
+    borderRadius: 2,
+  },
+  progressFull: {
+    width: "100%",
+  },
+  stepRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  stepBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  stepBadgeActive: {
+    backgroundColor: colors.coral,
+    borderColor: colors.coral,
+  },
+  stepBadgeText: {
+    color: colors.mist,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  stepBadgeTextActive: {
+    color: colors.navy,
+  },
+  stepHint: {
+    color: colors.mist,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  card: {
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: spacing.lg,
   },
   block: {
     gap: spacing.md,
@@ -439,20 +576,21 @@ const styles = StyleSheet.create({
     color: colors.cloud,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
+    fontSize: 15,
   },
   switchRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   switchCopy: {
     flex: 1,
     gap: 4,
   },
-  hint: {
-    color: "rgba(248,251,253,0.65)",
+  switchHint: {
+    color: colors.mist,
     fontSize: 12,
     lineHeight: 18,
   },
@@ -462,13 +600,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.line,
     padding: spacing.md,
-    gap: 6,
+    gap: 5,
   },
-  previewTitle: {
+  weatherCard: {
+    backgroundColor: colors.mintLight,
+    borderColor: colors.mintBorder,
+  },
+  previewLabel: {
     color: colors.mint,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
+    letterSpacing: 0.6,
   },
   previewValue: {
     color: colors.cloud,
@@ -477,46 +620,16 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   previewHint: {
-    color: "rgba(248,251,253,0.68)",
+    color: colors.mist,
     fontSize: 12,
     lineHeight: 18,
-  },
-  stepRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  stepBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: colors.line,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
-  stepBadgeActive: {
-    backgroundColor: colors.sand,
-    borderColor: colors.sand,
-  },
-  stepBadgeText: {
-    color: colors.cloud,
-    fontWeight: "800",
-  },
-  stepBadgeTextActive: {
-    color: colors.navy,
-  },
-  stepDivider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.line,
   },
   actionRow: {
     flexDirection: "row",
     gap: spacing.sm,
+    marginTop: spacing.xs,
   },
-  secondaryAction: {
+  backButton: {
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.line,
@@ -524,27 +637,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
   },
-  secondaryActionText: {
+  backButtonText: {
     color: colors.cloud,
     fontWeight: "700",
+    fontSize: 14,
   },
-  submit: {
-    marginTop: spacing.sm,
-    backgroundColor: colors.sand,
+  primaryButton: {
+    marginTop: spacing.xs,
+    backgroundColor: colors.coral,
     borderRadius: radii.md,
     paddingVertical: spacing.md,
     alignItems: "center",
   },
-  flexAction: {
-    flex: 1,
-  },
-  submitDisabled: {
-    opacity: 0.6,
-  },
-  submitText: {
+  primaryButtonText: {
     color: colors.navy,
     fontSize: 15,
     fontWeight: "800",
+  },
+  flex1: {
+    flex: 1,
+    marginTop: 0,
+  },
+  disabled: {
+    opacity: 0.6,
   },
 });

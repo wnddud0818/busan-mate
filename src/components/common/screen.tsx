@@ -1,6 +1,8 @@
+import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 import { ReactNode } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DebugPanel } from "./debug-panel";
@@ -11,12 +13,19 @@ interface ScreenProps {
   subtitle?: string;
   children: ReactNode;
   scroll?: boolean;
+  showBack?: boolean;
 }
 
-export const Screen = ({ title, subtitle, children, scroll = true }: ScreenProps) => {
+export const Screen = ({ title, subtitle, children, scroll = true, showBack = false }: ScreenProps) => {
   const content = (
     <View style={styles.content}>
       <View style={styles.header}>
+        {showBack ? (
+          <Pressable style={styles.backButton} onPress={() => router.back()}>
+            <Feather name="arrow-left" size={20} color={colors.cloud} />
+            <Text style={styles.backLabel}>뒤로</Text>
+          </Pressable>
+        ) : null}
         <Text style={styles.title}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       </View>
@@ -26,10 +35,14 @@ export const Screen = ({ title, subtitle, children, scroll = true }: ScreenProps
   );
 
   return (
-    <LinearGradient colors={["#08141E", "#102635", "#173447"]} style={styles.root}>
+    <LinearGradient colors={["#071120", "#0E2438", "#1A3E57"]} style={styles.root}>
       <SafeAreaView style={styles.safe}>
         {scroll ? (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
             {content}
           </ScrollView>
         ) : (
@@ -48,7 +61,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.xxl + 12,
   },
   content: {
     flex: 1,
@@ -56,18 +69,32 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   header: {
-    paddingTop: spacing.md,
-    gap: spacing.sm,
+    paddingTop: spacing.lg,
+    paddingBottom: 4,
+    gap: 6,
+  },
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    marginBottom: spacing.sm,
+    paddingVertical: 4,
+  },
+  backLabel: {
+    color: colors.cloud,
+    fontSize: 14,
+    fontWeight: "600",
   },
   title: {
     color: colors.cloud,
-    fontSize: 28,
-    fontWeight: "700",
-    letterSpacing: -0.4,
+    fontSize: 30,
+    fontWeight: "800",
+    letterSpacing: -0.6,
   },
   subtitle: {
-    color: "rgba(248,251,253,0.78)",
-    fontSize: 15,
+    color: colors.mist,
+    fontSize: 14,
     lineHeight: 22,
     paddingRight: spacing.md,
   },
