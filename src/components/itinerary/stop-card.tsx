@@ -3,9 +3,33 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { radii, spacing } from "../../theme/tokens";
 import { useColors } from "../../theme/use-colors";
-import { ItineraryStop } from "../../types/domain";
+import { ItineraryStop, RouteStep } from "../../types/domain";
+import { formatKrwFull } from "../../utils/currency";
 import { tText } from "../../utils/localized";
 import { clockLabel } from "../../utils/time";
+
+const formatTransitDuration = (minutes: number, locale: "ko" | "en") =>
+  locale === "ko" ? `${minutes}\uBD84` : `${minutes} min`;
+
+const formatTransitDistance = (distanceKm: number, locale: "ko" | "en") => {
+  const normalized = Number.isInteger(distanceKm) ? distanceKm.toFixed(0) : distanceKm.toFixed(1);
+  return locale === "ko" ? `${normalized}km` : `${normalized} km`;
+};
+
+const transitModeLabel = (mode: RouteStep["mode"], locale: "ko" | "en") => {
+  switch (mode) {
+    case "walk":
+      return locale === "ko" ? "\uB3C4\uBCF4" : "Walk";
+    case "bus":
+      return locale === "ko" ? "\uBC84\uC2A4" : "Bus";
+    case "metro":
+      return locale === "ko" ? "\uC9C0\uD558\uCCA0" : "Metro";
+    case "taxi":
+      return locale === "ko" ? "\uD0DD\uC2DC" : "Taxi";
+    default:
+      return locale === "ko" ? "\uC774\uB3D9" : "Transit";
+  }
+};
 
 export const StopCard = ({
   stop,
@@ -47,11 +71,60 @@ export const StopCard = ({
         <Text style={[styles.description, { color: colors.mist }]}>{tText(stop.place.description, locale)}</Text>
 
         {stop.transitFromPrevious ? (
-          <View style={styles.transitRow}>
-            <Feather name="navigation" size={11} color={colors.coral} />
-            <Text style={[styles.transit, { color: colors.coral }]}>
-              {tText(stop.transitFromPrevious.summary, locale)}
-            </Text>
+          <View style={styles.transitBlock}>
+            <View style={styles.transitRow}>
+              <Feather name="navigation" size={11} color={colors.coral} />
+              <Text style={[styles.transit, { color: colors.coral }]}>
+                {tText(stop.transitFromPrevious.summary, locale)}
+              </Text>
+            </View>
+
+            <View style={styles.transitMetaRow}>
+              <View style={[styles.transitChip, { backgroundColor: colors.surfaceHigh, borderColor: colors.line }]}>
+                <Text style={[styles.transitChipText, { color: colors.cloud }]}>
+                  {formatTransitDuration(stop.transitFromPrevious.durationMinutes, locale)}
+                </Text>
+              </View>
+              <View style={[styles.transitChip, { backgroundColor: colors.surfaceHigh, borderColor: colors.line }]}>
+                <Text style={[styles.transitChipText, { color: colors.cloud }]}>
+                  {formatTransitDistance(stop.transitFromPrevious.distanceKm, locale)}
+                </Text>
+              </View>
+              <View style={[styles.transitChip, { backgroundColor: colors.surfaceHigh, borderColor: colors.line }]}>
+                <Text style={[styles.transitChipText, { color: colors.cloud }]}>
+                  {formatKrwFull(stop.transitFromPrevious.estimatedFareKrw, locale)}
+                </Text>
+              </View>
+            </View>
+
+            {stop.transitFromPrevious.steps.length > 0 ? (
+              <View style={styles.transitSteps}>
+                {stop.transitFromPrevious.steps.map((step, index) => (
+                  <View
+                    key={`${stop.id}-step-${index}-${step.mode}`}
+                    style={[styles.transitStepRow, { borderColor: colors.line }]}
+                  >
+                    <View
+                      style={[styles.transitStepBadge, { backgroundColor: colors.glass, borderColor: colors.line }]}
+                    >
+                      <Text style={[styles.transitStepBadgeText, { color: colors.cloud }]}>
+                        {transitModeLabel(step.mode, locale)}
+                      </Text>
+                    </View>
+                    <View style={styles.transitStepCopy}>
+                      <Text style={[styles.transitStepTitle, { color: colors.cloud }]}>
+                        {tText(step.label, locale)}
+                      </Text>
+                      {step.detail ? (
+                        <Text style={[styles.transitStepDetail, { color: colors.mist }]}>
+                          {tText(step.detail, locale)}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -76,7 +149,7 @@ export const StopCard = ({
             >
               <Feather name="external-link" size={12} color={colors.cloud} />
               <Text style={[styles.secondaryActionText, { color: colors.cloud }]}>
-                {locale === "ko" ? "예약" : "Booking"}
+                {locale === "ko" ? "\uC608\uC57D" : "Booking"}
               </Text>
             </Pressable>
           ) : null}
@@ -138,6 +211,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
   },
+  transitBlock: {
+    gap: 8,
+  },
   transitRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -147,6 +223,53 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     flex: 1,
+  },
+  transitMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  transitChip: {
+    borderWidth: 1,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  transitChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  transitSteps: {
+    gap: 6,
+  },
+  transitStepRow: {
+    flexDirection: "row",
+    gap: 8,
+    borderTopWidth: 1,
+    paddingTop: 8,
+  },
+  transitStepBadge: {
+    borderWidth: 1,
+    borderRadius: radii.pill,
+    alignSelf: "flex-start",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  transitStepBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  transitStepCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  transitStepTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  transitStepDetail: {
+    fontSize: 11,
+    lineHeight: 16,
   },
   note: {
     fontSize: 12,

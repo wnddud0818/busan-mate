@@ -631,7 +631,7 @@ export default function ItineraryDetailPage() {
       {itinerary.days.map((day) => (
         <SectionCard key={day.dayNumber} title={`Day ${day.dayNumber}`} hint={day.theme[locale]}>
           {day.stops.map((stop) => {
-            const navigationLinks = buildNavigationLinks(stop.place.coordinates);
+            const navigationLinks = stop.transitFromPrevious?.navigationLinks ?? buildNavigationLinks(stop.place.coordinates);
 
             return (
               <StopCard

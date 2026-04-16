@@ -74,6 +74,7 @@ const transitLegSchema = z.object({
     z.object({
       mode: z.enum(["walk", "bus", "metro", "taxi"]),
       label: localizedTextSchema,
+      detail: localizedTextSchema.optional(),
     })
   ),
   navigationLinks: navigationLinksSchema,

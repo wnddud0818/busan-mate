@@ -9,6 +9,7 @@ import {
   normalizeTripPreferences,
 } from "../features/itinerary/planning";
 import { buildFallbackItinerary, buildTransitLeg, validateStructuredItinerary } from "../features/itinerary/planner";
+import { buildOdsayTransitSteps } from "../features/itinerary/transit-steps";
 import { canInvokeEdgeFunction, supabase } from "../lib/supabase";
 import {
   AppLocale,
@@ -577,8 +578,9 @@ const fetchOdsayTransit = async (
     }
 
     const payload = await response.json();
-    const firstPath = payload?.result?.path?.[0]?.info;
-    if (!firstPath) {
+    const firstPath = payload?.result?.path?.[0];
+    const firstPathInfo = firstPath?.info;
+    if (!firstPathInfo) {
       logApiResponse({
         label: "odsay.searchPubTransPathT",
         traceId,
@@ -589,11 +591,13 @@ const fetchOdsayTransit = async (
     }
 
     const fallbackLeg = buildTransitLeg(from, to, "ko", "odsay", mobilityMode);
+    const parsedSteps = buildOdsayTransitSteps(firstPath?.subPath);
     const leg: TransitLeg = {
       ...fallbackLeg,
-      durationMinutes: firstPath.totalTime ?? fallbackLeg.durationMinutes,
-      distanceKm: Number(((firstPath.totalDistance ?? fallbackLeg.distanceKm * 1000) / 1000).toFixed(1)),
-      estimatedFareKrw: firstPath.payment ?? fallbackLeg.estimatedFareKrw,
+      durationMinutes: firstPathInfo.totalTime ?? fallbackLeg.durationMinutes,
+      distanceKm: Number(((firstPathInfo.totalDistance ?? fallbackLeg.distanceKm * 1000) / 1000).toFixed(1)),
+      estimatedFareKrw: firstPathInfo.payment ?? fallbackLeg.estimatedFareKrw,
+      steps: parsedSteps.length > 0 ? parsedSteps : fallbackLeg.steps,
       summary: {
         ko: `${from.name.ko} -> ${to.name.ko} 실시간 대중교통`,
         en: `Live transit from ${from.name.en} to ${to.name.en}`,

@@ -161,6 +161,7 @@ export interface Place {
 export interface RouteStep {
   mode: "walk" | "bus" | "metro" | "taxi";
   label: LocalizedText;
+  detail?: LocalizedText;
 }
 
 export interface NavigationLinks {

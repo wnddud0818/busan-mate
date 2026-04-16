@@ -25,6 +25,7 @@ import { buildNavigationLinks } from "../../utils/maps";
 import { tText } from "../../utils/localized";
 import { buildBudgetSummary, getStartAreaOrDefault, makeBudgetLabel, normalizeTripPreferences } from "./planning";
 import { itinerarySchema } from "./schema";
+import { buildFallbackTransitSteps } from "./transit-steps";
 
 type ScoredPlace = Place & {
   score: number;
@@ -205,6 +206,7 @@ export const buildTransitLeg = (
             },
           },
         ];
+  void steps;
 
   return {
     fromPlaceId: fromPlace.id,
@@ -223,7 +225,11 @@ export const buildTransitLeg = (
     distanceKm,
     estimatedFareKrw,
     provider,
-    steps,
+    steps: buildFallbackTransitSteps({
+      distanceKm,
+      durationMinutes,
+      mobilityMode,
+    }),
     navigationLinks: buildNavigationLinks(toPlace.coordinates),
   };
 };
