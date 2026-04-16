@@ -43,6 +43,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="settings" />
           <Stack.Screen name="itinerary/[id]" />
+          <Stack.Screen name="plan/ai-wizard" options={{ gestureEnabled: true }} />
           <Stack.Screen name="trip/[sessionId]" />
           <Stack.Screen name="trip/[sessionId]/guide" />
         </Stack>

@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { Text } from "react-native";
 import { useTranslation } from "react-i18next";
 
+import { AiPlanHero } from "../../src/components/ai-wizard/ai-plan-hero";
 import { Screen } from "../../src/components/common/screen";
 import { SectionCard } from "../../src/components/common/section-card";
 import { TripPreferencesForm } from "../../src/components/forms/trip-preferences-form";
@@ -31,6 +32,9 @@ export default function PlanTab() {
 
   return (
     <Screen title={t("plan.title")} subtitle={t("plan.subtitle")}>
+      {/* AI 위저드 진입 카드 */}
+      <AiPlanHero locale={locale} onPress={() => router.push("/plan/ai-wizard")} />
+
       {/* 날씨·주의 알림 */}
       {notices.length > 0 ? (
         <SectionCard variant="warning">
