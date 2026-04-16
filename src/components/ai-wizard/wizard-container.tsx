@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { addDays, format } from "date-fns";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FieldPath, useForm } from "react-hook-form";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -40,7 +40,7 @@ export const WizardContainer = ({ locale, onSubmit, onClose, isSubmitting }: Wiz
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const { control, handleSubmit, trigger, watch } = useForm<TripPreferences>({
+  const { control, handleSubmit, setValue, trigger, watch } = useForm<TripPreferences>({
     resolver: zodResolver(tripPreferencesSchema),
     defaultValues: {
       tripDays: 2,
@@ -54,21 +54,38 @@ export const WizardContainer = ({ locale, onSubmit, onClose, isSubmitting }: Wiz
       mobilityMode: "mixed",
       accessibilityNeeds: false,
       indoorFallback: true,
-      includeLodgingCost: true,
+      includeLodgingCost: false,
       locale,
     },
   });
 
   const totalBudgetKrw = watch("totalBudgetKrw");
   const partySize = watch("partySize");
+  const companionType = watch("companionType");
   const travelDate = watch("travelDate");
   const tripDays = watch("tripDays");
   const startAreaId = watch("startAreaId");
+  const lastGroupCompanionType = useRef<"couple" | "family" | "friends">("friends");
 
   const [stepIndex, setStepIndex] = useState(0);
   const translateX = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
   const transitioning = useRef(false);
+
+  useEffect(() => {
+    if (companionType !== "solo") {
+      lastGroupCompanionType.current = companionType;
+    }
+
+    if (partySize === 1 && companionType !== "solo") {
+      setValue("companionType", "solo");
+      return;
+    }
+
+    if (partySize > 1 && companionType === "solo") {
+      setValue("companionType", lastGroupCompanionType.current);
+    }
+  }, [companionType, partySize, setValue]);
 
   const runTransition = useCallback(
     (target: number, direction: 1 | -1) => {
@@ -176,6 +193,7 @@ export const WizardContainer = ({ locale, onSubmit, onClose, isSubmitting }: Wiz
             locale={locale}
             totalBudgetKrw={totalBudgetKrw}
             partySize={partySize}
+            startAreaId={startAreaId}
             travelDate={travelDate}
             tripDays={tripDays}
           />

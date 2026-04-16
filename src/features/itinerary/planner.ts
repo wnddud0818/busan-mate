@@ -57,6 +57,10 @@ const estimateTransitFareKrw = (distanceKm: number, mode: TripPreferences["mobil
     return 0;
   }
 
+  if (mode === "car") {
+    return 0;
+  }
+
   if (distanceKm < 4) {
     return 1600;
   }
@@ -66,6 +70,21 @@ const estimateTransitFareKrw = (distanceKm: number, mode: TripPreferences["mobil
   }
 
   return 2200;
+};
+
+const resolveTransitDurationMinutes = (
+  distanceKm: number,
+  mode: TripPreferences["mobilityMode"] = "mixed"
+) => {
+  if (distanceKm < 1.3 || mode === "walk") {
+    return Math.max(12, Math.round(distanceKm * 18));
+  }
+
+  if (mode === "car") {
+    return Math.max(8, Math.round(distanceKm * 4 + 8));
+  }
+
+  return Math.round(distanceKm * 9 + 14);
 };
 
 const weatherScore = (place: Place, weatherSnapshot: WeatherSnapshot) => {
@@ -129,6 +148,8 @@ export const scorePlaces = (
           ? place.recommendedStayMinutes <= 80
             ? 10
             : 2
+          : normalized.mobilityMode === "car"
+            ? 14
           : 12;
       const budgetScore = place.priceLevel === normalized.budgetLevel ? 12 : 5;
       const companionScore =
@@ -175,8 +196,7 @@ export const buildTransitLeg = (
 ): TransitLeg => {
   const meters = getDistance(fromPlace.coordinates, toPlace.coordinates);
   const distanceKm = Number((meters / 1000).toFixed(1));
-  const durationMinutes =
-    distanceKm < 1.3 ? Math.max(12, Math.round(distanceKm * 18)) : Math.round(distanceKm * 9 + 14);
+  const durationMinutes = resolveTransitDurationMinutes(distanceKm, mobilityMode);
   const estimatedFareKrw = estimateTransitFareKrw(distanceKm, mobilityMode);
 
   const steps =
@@ -215,11 +235,15 @@ export const buildTransitLeg = (
       ko:
         distanceKm < 1.3 || mobilityMode === "walk"
           ? `${tText(fromPlace.name, locale)}에서 ${tText(toPlace.name, locale)}까지 도보 이동`
-          : `${tText(fromPlace.name, locale)} -> ${tText(toPlace.name, locale)} 대중교통 이동`,
+          : mobilityMode === "car"
+            ? `${tText(fromPlace.name, locale)} -> ${tText(toPlace.name, locale)} 자차 이동`
+            : `${tText(fromPlace.name, locale)} -> ${tText(toPlace.name, locale)} 대중교통 이동`,
       en:
         distanceKm < 1.3 || mobilityMode === "walk"
           ? `Walk from ${tText(fromPlace.name, locale)} to ${tText(toPlace.name, locale)}`
-          : `Transit from ${tText(fromPlace.name, locale)} to ${tText(toPlace.name, locale)}`,
+          : mobilityMode === "car"
+            ? `Drive from ${tText(fromPlace.name, locale)} to ${tText(toPlace.name, locale)}`
+            : `Transit from ${tText(fromPlace.name, locale)} to ${tText(toPlace.name, locale)}`,
     },
     durationMinutes,
     distanceKm,
@@ -251,7 +275,10 @@ const selectPlacesWithinBudget = (
   const availableBudgetKrw = Math.max(0, preferences.totalBudgetKrw - getLodgingTotalKrw(lodging));
   const selected: ScoredPlace[] = [];
   let estimatedTotalKrw = 0;
-  const baseTransitCostPerLeg = preferences.mobilityMode === "walk" ? 0 : 1600 * preferences.partySize;
+  const baseTransitCostPerLeg =
+    preferences.mobilityMode === "walk" || preferences.mobilityMode === "car"
+      ? 0
+      : 1600 * preferences.partySize;
 
   for (const place of scored) {
     if (selected.length >= targetStops) {

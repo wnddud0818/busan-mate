@@ -20,6 +20,25 @@ describe("transit step helpers", () => {
     });
   });
 
+  it("returns a driving step when car mode is selected", () => {
+    const steps = buildFallbackTransitSteps({
+      distanceKm: 6.5,
+      durationMinutes: 34,
+      mobilityMode: "car",
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0]).toMatchObject({
+      mode: "car",
+      label: {
+        en: "Drive",
+      },
+      detail: {
+        en: "34 min / 6.5 km",
+      },
+    });
+  });
+
   it("turns ODsay sub-paths into detailed route steps", () => {
     const steps = buildOdsayTransitSteps([
       {

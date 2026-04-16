@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { addDays, format } from "date-fns";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { z } from "zod";
@@ -42,6 +42,7 @@ const optionLabel = {
     transit: { ko: "대중교통", en: "Transit" },
     walk: { ko: "도보 위주", en: "Walk-first" },
     mixed: { ko: "혼합", en: "Mixed" },
+    car: { ko: "자차", en: "Car" },
   },
   interests: {
     food: { ko: "맛집", en: "Food" },
@@ -178,7 +179,7 @@ export const TripPreferencesForm = ({
       mobilityMode: "mixed",
       accessibilityNeeds: false,
       indoorFallback: true,
-      includeLodgingCost: true,
+      includeLodgingCost: false,
       locale,
     },
   });
@@ -186,10 +187,27 @@ export const TripPreferencesForm = ({
   const selectedInterests = watch("interests");
   const totalBudgetKrw = watch("totalBudgetKrw");
   const partySize = watch("partySize");
+  const companionType = watch("companionType");
   const tripDays = watch("tripDays");
   const travelDate = watch("travelDate");
   const startAreaId = watch("startAreaId");
   const derivedBudgetLevel = deriveBudgetLevel({ totalBudgetKrw, partySize, tripDays });
+  const lastGroupCompanionType = useRef<"couple" | "family" | "friends">("friends");
+
+  useEffect(() => {
+    if (companionType !== "solo") {
+      lastGroupCompanionType.current = companionType;
+    }
+
+    if (partySize === 1 && companionType !== "solo") {
+      setValue("companionType", "solo");
+      return;
+    }
+
+    if (partySize > 1 && companionType === "solo") {
+      setValue("companionType", lastGroupCompanionType.current);
+    }
+  }, [companionType, partySize, setValue]);
 
   const weatherQuery = useQuery({
     queryKey: ["weather-preview", startAreaId, travelDate],
@@ -465,7 +483,7 @@ export const TripPreferencesForm = ({
                 {locale === "ko" ? "이동 성향" : "Mobility"}
               </Text>
               <View style={styles.rowWrap}>
-                {(["transit", "walk", "mixed"] as const).map((value) => (
+                {(["transit", "walk", "mixed", "car"] as const).map((value) => (
                   <Pill
                     key={value}
                     label={localized("mobilityMode", value, locale)}

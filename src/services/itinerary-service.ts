@@ -541,6 +541,19 @@ const fetchOdsayTransit = async (
   to: Place,
   mobilityMode: TripPreferences["mobilityMode"] = "mixed"
 ): Promise<TransitLeg | null> => {
+  if (mobilityMode === "car") {
+    logDebugInfo({
+      label: "odsay.searchPubTransPathT",
+      summary: "Skipping ODsay because car mode uses fallback driving legs.",
+      payload: {
+        from: from.name.en,
+        to: to.name.en,
+        mobilityMode,
+      },
+    });
+    return null;
+  }
+
   const params = new URLSearchParams({
     SX: String(from.coordinates.longitude),
     SY: String(from.coordinates.latitude),

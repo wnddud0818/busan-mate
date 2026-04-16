@@ -20,7 +20,7 @@ export const tripPreferencesSchema = z.object({
     .array(z.enum(["food", "culture", "nature", "photospot", "shopping", "history", "night", "healing"]))
     .min(1),
   budgetLevel: z.enum(["value", "balanced", "premium"]),
-  mobilityMode: z.enum(["transit", "walk", "mixed"]),
+  mobilityMode: z.enum(["transit", "walk", "mixed", "car"]),
   accessibilityNeeds: z.boolean(),
   indoorFallback: z.boolean(),
   includeLodgingCost: z.boolean(),
@@ -72,7 +72,7 @@ const transitLegSchema = z.object({
   provider: z.enum(["odsay", "fallback"]),
   steps: z.array(
     z.object({
-      mode: z.enum(["walk", "bus", "metro", "taxi"]),
+      mode: z.enum(["walk", "bus", "metro", "taxi", "car"]),
       label: localizedTextSchema,
       detail: localizedTextSchema.optional(),
     })

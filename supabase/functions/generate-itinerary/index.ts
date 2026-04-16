@@ -74,7 +74,7 @@ type Preferences = {
   companionType: "solo" | "couple" | "family" | "friends";
   interests: string[];
   budgetLevel: "value" | "balanced" | "premium";
-  mobilityMode: "transit" | "walk" | "mixed";
+  mobilityMode: "transit" | "walk" | "mixed" | "car";
   accessibilityNeeds: boolean;
   indoorFallback: boolean;
   includeLodgingCost: boolean;
@@ -157,6 +157,10 @@ const estimateTransitFareKrw = (distanceKm: number, mobilityMode: Preferences["m
     return 0;
   }
 
+  if (mobilityMode === "car") {
+    return 0;
+  }
+
   if (distanceKm < 4) {
     return 1600;
   }
@@ -166,6 +170,21 @@ const estimateTransitFareKrw = (distanceKm: number, mobilityMode: Preferences["m
   }
 
   return 2200;
+};
+
+const resolveTransitDurationMinutes = (
+  distanceKm: number,
+  mobilityMode: Preferences["mobilityMode"]
+) => {
+  if (distanceKm < 1.3 || mobilityMode === "walk") {
+    return Math.max(12, Math.round(distanceKm * 18));
+  }
+
+  if (mobilityMode === "car") {
+    return Math.max(8, Math.round(distanceKm * 4 + 8));
+  }
+
+  return Math.round(distanceKm * 9 + 14);
 };
 
 const estimateDistanceKm = (from: Coordinates, to: Coordinates) => {
@@ -187,8 +206,7 @@ const buildTransitLeg = ({
 }) => {
   const distanceKm = estimateDistanceKm(from.coordinates, to.coordinates);
   const estimatedFareKrw = estimateTransitFareKrw(distanceKm, mobilityMode);
-  const durationMinutes =
-    distanceKm < 1.3 ? Math.max(12, Math.round(distanceKm * 18)) : Math.round(distanceKm * 9 + 14);
+  const durationMinutes = resolveTransitDurationMinutes(distanceKm, mobilityMode);
   const naverLink = `nmap://route/public?dlat=${to.coordinates.latitude}&dlng=${to.coordinates.longitude}&dname=${encodeURIComponent(to.name.ko)}`;
 
   return {
@@ -198,11 +216,15 @@ const buildTransitLeg = ({
       ko:
         distanceKm < 1.3 || mobilityMode === "walk"
           ? `${from.name.ko}에서 ${to.name.ko}까지 도보 이동`
-          : `${from.name.ko}에서 ${to.name.ko}까지 대중교통 이동`,
+          : mobilityMode === "car"
+            ? `${from.name.ko}에서 ${to.name.ko}까지 자차 이동`
+            : `${from.name.ko}에서 ${to.name.ko}까지 대중교통 이동`,
       en:
         distanceKm < 1.3 || mobilityMode === "walk"
           ? `Walk from ${from.name.en} to ${to.name.en}`
-          : `Transit from ${from.name.en} to ${to.name.en}`,
+          : mobilityMode === "car"
+            ? `Drive from ${from.name.en} to ${to.name.en}`
+            : `Transit from ${from.name.en} to ${to.name.en}`,
     },
     durationMinutes,
     distanceKm,
@@ -219,6 +241,16 @@ const buildTransitLeg = ({
               },
             },
           ]
+        : mobilityMode === "car"
+          ? [
+              {
+                mode: "car",
+                label: {
+                  ko: `자차 ${durationMinutes}분 이동`,
+                  en: `Drive for about ${durationMinutes} min`,
+                },
+              },
+            ]
         : [
             {
               mode: "metro",
@@ -312,6 +344,10 @@ const selectPlaces = (
   );
   const selected: Place[] = [];
   let estimatedTotal = 0;
+  const baseTransitCostPerLeg =
+    preferences.mobilityMode === "walk" || preferences.mobilityMode === "car"
+      ? 0
+      : 1600 * preferences.partySize;
 
   for (const place of ranked) {
     if (selected.length >= targetCount) {
@@ -320,7 +356,7 @@ const selectPlaces = (
 
     const additionalCost =
       place.estimatedSpendKrw * preferences.partySize +
-      (selected.length > 0 ? 1600 * preferences.partySize : 0);
+      (selected.length > 0 ? baseTransitCostPerLeg : 0);
 
     if (estimatedTotal + additionalCost <= availableBudgetKrw) {
       selected.push(place);

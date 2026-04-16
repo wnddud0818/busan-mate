@@ -26,6 +26,8 @@ const transitModeLabel = (mode: RouteStep["mode"], locale: "ko" | "en") => {
       return locale === "ko" ? "\uC9C0\uD558\uCCA0" : "Metro";
     case "taxi":
       return locale === "ko" ? "\uD0DD\uC2DC" : "Taxi";
+    case "car":
+      return locale === "ko" ? "\uC790\uCC28" : "Car";
     default:
       return locale === "ko" ? "\uC774\uB3D9" : "Transit";
   }

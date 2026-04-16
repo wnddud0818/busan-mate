@@ -122,7 +122,7 @@ export const DebugPanel = () => {
   const locale = useAppStore((state) => state.locale);
   const debugLogs = useAppStore((state) => state.debugLogs);
   const clearDebugLogs = useAppStore((state) => state.actions.clearDebugLogs);
-  const [open, setOpen] = useState(debugLogs.length > 0);
+  const [open, setOpen] = useState(false);
   const [selectedTab, setSelectedTab] = useState<DebugTabId>("all");
   const [expandedLogIds, setExpandedLogIds] = useState<string[]>([]);
 

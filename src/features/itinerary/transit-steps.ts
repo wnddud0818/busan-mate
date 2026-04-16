@@ -18,6 +18,8 @@ type OdsaySubPath = {
 const KO = {
   walk: "\uB3C4\uBCF4",
   walkMove: "\uB3C4\uBCF4 \uC774\uB3D9",
+  car: "\uC790\uCC28",
+  carMove: "\uC790\uCC28 \uC774\uB3D9",
   metroTransfer: "\uC9C0\uD558\uCCA0 \uD658\uC2B9 \uCD94\uCC9C",
   firstLastMile: "\uC5ED-\uC7A5\uC18C \uB3C4\uBCF4 \uC5F0\uACB0",
   bus: "\uBC84\uC2A4",
@@ -205,6 +207,22 @@ export const buildFallbackTransitSteps = ({
         label: {
           ko: KO.walkMove,
           en: "Walk",
+        },
+        detail: buildStepDetail({
+          durationMinutes,
+          distanceKm,
+        }),
+      },
+    ];
+  }
+
+  if (mobilityMode === "car") {
+    return [
+      {
+        mode: "car",
+        label: {
+          ko: KO.carMove,
+          en: "Drive",
         },
         detail: buildStepDetail({
           durationMinutes,

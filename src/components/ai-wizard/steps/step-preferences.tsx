@@ -13,6 +13,7 @@ const mobilityOptions = [
   { id: "transit", ko: "대중교통", en: "Transit", emoji: "\uD83D\uDE8C" },
   { id: "walk", ko: "도보 위주", en: "Walk-first", emoji: "\uD83D\uDEB6" },
   { id: "mixed", ko: "혼합", en: "Mixed", emoji: "\uD83D\uDD00" },
+  { id: "car", ko: "자차", en: "Car", emoji: "\uD83D\uDE97" },
 ] as const;
 
 interface StepPreferencesProps {

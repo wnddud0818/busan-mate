@@ -2,7 +2,7 @@ export type AppLocale = "ko" | "en";
 
 export type CompanionType = "solo" | "couple" | "family" | "friends";
 export type BudgetLevel = "value" | "balanced" | "premium";
-export type MobilityMode = "transit" | "walk" | "mixed";
+export type MobilityMode = "transit" | "walk" | "mixed" | "car";
 export type StartAreaId =
   | "seomyeon"
   | "haeundae"
@@ -159,7 +159,7 @@ export interface Place {
 }
 
 export interface RouteStep {
-  mode: "walk" | "bus" | "metro" | "taxi";
+  mode: "walk" | "bus" | "metro" | "taxi" | "car";
   label: LocalizedText;
   detail?: LocalizedText;
 }

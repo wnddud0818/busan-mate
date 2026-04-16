@@ -1,6 +1,6 @@
 import { seedPlaces } from "../../../data/seed";
 import { TripPreferences } from "../../../types/domain";
-import { buildFallbackItinerary, scorePlaces, validateStructuredItinerary } from "../planner";
+import { buildFallbackItinerary, buildTransitLeg, scorePlaces, validateStructuredItinerary } from "../planner";
 
 const preferences: TripPreferences = {
   tripDays: 2,
@@ -117,5 +117,28 @@ describe("planner", () => {
     expect(hasLunchSlot).toBe(true);
     expect(hasEveningStop).toBe(true);
     expect(latestEndTime >= "20:00").toBe(true);
+  });
+
+  it("builds a driving leg when car mode is selected", () => {
+    const from = seedPlaces[0]!;
+    const to = {
+      ...seedPlaces[0]!,
+      id: "drive-test",
+      coordinates: {
+        latitude: seedPlaces[0]!.coordinates.latitude + 0.05,
+        longitude: seedPlaces[0]!.coordinates.longitude + 0.05,
+      },
+    };
+
+    const leg = buildTransitLeg(from, to, "en", "fallback", "car");
+
+    expect(leg.estimatedFareKrw).toBe(0);
+    expect(leg.steps[0]).toMatchObject({
+      mode: "car",
+      label: {
+        en: "Drive",
+      },
+    });
+    expect(leg.summary.en).toContain("Drive from");
   });
 });
