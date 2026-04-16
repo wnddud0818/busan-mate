@@ -105,6 +105,14 @@ type PlannerDebug = {
   notes: string[];
 };
 
+type StopSlotKind = "default" | "lunch" | "dinner" | "night";
+
+const DAY_START_MINUTES = 9 * 60;
+const LATEST_DAY_START_MINUTES = 15 * 60;
+const LUNCH_SLOT_MINUTES = 12 * 60 + 30;
+const DINNER_SLOT_MINUTES = 18 * 60 + 30;
+const NIGHT_SLOT_MINUTES = 19 * 60;
+
 const makeBudgetLabel = (budgetLevel: Preferences["budgetLevel"]) =>
   budgetLevel === "value"
     ? { ko: "1인 4만~7만 원", en: "KRW 40k-70k per person" }
@@ -328,6 +336,375 @@ const chunkByDays = (places: Place[], tripDays: number) => {
   return buckets;
 };
 
+const isFoodPlace = (place: Place) => place.categories.includes("food");
+const isNightPlace = (place: Place) => place.categories.includes("night");
+
+const movePlaceById = <T extends Place>(places: T[], placeId: string, targetIndex: number) => {
+  const currentIndex = places.findIndex((place) => place.id === placeId);
+  if (currentIndex === -1) {
+    return places;
+  }
+
+  const next = [...places];
+  const [item] = next.splice(currentIndex, 1);
+  if (!item) {
+    return places;
+  }
+  next.splice(Math.max(0, Math.min(targetIndex, next.length)), 0, item);
+  return next;
+};
+
+const arrangePlacesForDaySchedule = <T extends Place>(places: T[]) => {
+  let ordered = [...places];
+  const nightSet = new Set(ordered.filter((place) => isNightPlace(place)).map((place) => place.id));
+
+  if (nightSet.size > 0) {
+    ordered = [...ordered.filter((place) => !nightSet.has(place.id)), ...ordered.filter((place) => nightSet.has(place.id))];
+  }
+
+  const foodPlaces = ordered.filter((place) => isFoodPlace(place));
+  if (foodPlaces.length === 0) {
+    return ordered;
+  }
+
+  const lunchCandidate = foodPlaces.find((place) => !isNightPlace(place)) ?? foodPlaces[0]!;
+  const lunchIndex = Math.min(Math.max(1, Math.floor(ordered.length / 2) - 1), Math.max(ordered.length - 2, 0));
+  ordered = movePlaceById(ordered, lunchCandidate.id, lunchIndex);
+
+  const dinnerCandidate =
+    [...ordered].reverse().find((place) => isFoodPlace(place) && place.id !== lunchCandidate.id) ??
+    [...ordered].reverse().find((place) => isFoodPlace(place));
+
+  if (dinnerCandidate) {
+    const dinnerIndex = Math.max(ordered.length - (isNightPlace(dinnerCandidate) ? 1 : 2), 0);
+    ordered = movePlaceById(ordered, dinnerCandidate.id, dinnerIndex);
+  }
+
+  return ordered;
+};
+
+const resolveTargetEndMinutes = (places: Place[], preferences: Preferences) => {
+  const wantsNight = preferences.interests.includes("night") || places.some((place) => isNightPlace(place));
+
+  if (!wantsNight) {
+    return 20 * 60 + 30;
+  }
+
+  if (preferences.companionType === "friends" || preferences.companionType === "couple") {
+    return 22 * 60;
+  }
+
+  return 21 * 60 + 30;
+};
+
+const resolveMealAnchors = (places: Place[]) => {
+  const foodPlaces = places.filter((place) => isFoodPlace(place));
+  const lunchPlace = foodPlaces.find((place) => !isNightPlace(place)) ?? foodPlaces[0];
+  const dinnerPlace =
+    [...foodPlaces].reverse().find((place) => place.id !== lunchPlace?.id) ??
+    [...foodPlaces].reverse()[0];
+
+  return {
+    lunchPlaceId: lunchPlace?.id,
+    dinnerPlaceId: dinnerPlace?.id,
+  };
+};
+
+const resolveStopSlotKind = ({
+  place,
+  index,
+  totalStops,
+  lunchPlaceId,
+  dinnerPlaceId,
+}: {
+  place: Place;
+  index: number;
+  totalStops: number;
+  lunchPlaceId?: string;
+  dinnerPlaceId?: string;
+}): StopSlotKind => {
+  if (place.id === lunchPlaceId) {
+    return "lunch";
+  }
+
+  if (place.id === dinnerPlaceId && isFoodPlace(place) && !isNightPlace(place)) {
+    return "dinner";
+  }
+
+  if (isNightPlace(place) && index >= Math.max(totalStops - 2, 0)) {
+    return "night";
+  }
+
+  if (place.id === dinnerPlaceId && (isNightPlace(place) || index === totalStops - 1)) {
+    return isNightPlace(place) ? "night" : "dinner";
+  }
+
+  return "default";
+};
+
+const resolveStayMinutes = ({
+  place,
+  preferences,
+  slotKind,
+  weatherSnapshot,
+}: {
+  place: Place;
+  preferences: Preferences;
+  slotKind: StopSlotKind;
+  weatherSnapshot: WeatherSnapshot;
+}) => {
+  let minutes = place.recommendedStayMinutes;
+
+  if (place.categories.includes("culture") && place.indoor) {
+    minutes = Math.max(minutes, 85);
+  }
+
+  if (place.categories.includes("history")) {
+    minutes += 10;
+  }
+
+  if (place.categories.includes("photospot") || place.categories.includes("nature")) {
+    minutes += 10;
+  }
+
+  if (weatherSnapshot.signal === "clear" && place.categories.includes("nature")) {
+    minutes += 10;
+  }
+
+  if (slotKind === "lunch") {
+    minutes = Math.max(minutes, 75);
+  }
+
+  if (slotKind === "dinner") {
+    minutes = Math.max(minutes, 85);
+  }
+
+  if (slotKind === "night") {
+    minutes = Math.max(minutes, 95);
+  }
+
+  if (preferences.mobilityMode === "walk") {
+    minutes = Math.min(minutes, 95);
+  }
+
+  return minutes;
+};
+
+const resolvePostStopBufferMinutes = (slotKind: StopSlotKind) => {
+  switch (slotKind) {
+    case "night":
+      return 10;
+    case "dinner":
+      return 15;
+    default:
+      return 25;
+  }
+};
+
+const toIsoAtMinutes = (dayDateLabel: string, minutes: number) => {
+  const clampedMinutes = Math.max(0, Math.min(minutes, 23 * 60 + 59));
+  const hours = Math.floor(clampedMinutes / 60);
+  const mins = clampedMinutes % 60;
+  return `${dayDateLabel}T${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}:00+09:00`;
+};
+
+const scheduleDayStops = ({
+  places,
+  dayNumber,
+  dayDateLabel,
+  preferences,
+  weatherSnapshot,
+}: {
+  places: Place[];
+  dayNumber: number;
+  dayDateLabel: string;
+  preferences: Preferences;
+  weatherSnapshot: WeatherSnapshot;
+}) => {
+  const orderedPlaces = arrangePlacesForDaySchedule(places);
+  const { lunchPlaceId, dinnerPlaceId } = resolveMealAnchors(orderedPlaces);
+  const totalStops = orderedPlaces.length;
+  const targetEndMinutes = resolveTargetEndMinutes(orderedPlaces, preferences);
+  const estimatedRouteMinutes = orderedPlaces.reduce((total, place, index) => {
+    const previous = orderedPlaces[index - 1];
+    const transitDurationMinutes = previous
+      ? buildTransitLeg({
+          from: previous,
+          to: place,
+          locale: preferences.locale,
+          mobilityMode: preferences.mobilityMode,
+        }).durationMinutes
+      : 0;
+    const slotKind = resolveStopSlotKind({
+      place,
+      index,
+      totalStops,
+      lunchPlaceId,
+      dinnerPlaceId,
+    });
+
+    return (
+      total +
+      transitDurationMinutes +
+      resolveStayMinutes({
+        place,
+        preferences,
+        slotKind,
+        weatherSnapshot,
+      }) +
+      (index < totalStops - 1 ? resolvePostStopBufferMinutes(slotKind) : 0)
+    );
+  }, 0);
+  const firstAnchoredIndex = orderedPlaces.findIndex((place, index) => {
+    const slotKind = resolveStopSlotKind({
+      place,
+      index,
+      totalStops,
+      lunchPlaceId,
+      dinnerPlaceId,
+    });
+    return slotKind !== "default";
+  });
+  let anchorLimitMinutes = LATEST_DAY_START_MINUTES;
+
+  if (firstAnchoredIndex >= 0) {
+    const anchorPlace = orderedPlaces[firstAnchoredIndex]!;
+    const anchorSlotKind = resolveStopSlotKind({
+      place: anchorPlace,
+      index: firstAnchoredIndex,
+      totalStops,
+      lunchPlaceId,
+      dinnerPlaceId,
+    });
+    const anchorSlotMinutes =
+      anchorSlotKind === "lunch"
+        ? LUNCH_SLOT_MINUTES
+        : anchorSlotKind === "dinner"
+          ? DINNER_SLOT_MINUTES
+          : NIGHT_SLOT_MINUTES;
+    let minutesUntilAnchor = 0;
+
+    for (let index = 0; index < firstAnchoredIndex; index += 1) {
+      const currentPlace = orderedPlaces[index]!;
+      const previous = orderedPlaces[index - 1];
+      const slotKind = resolveStopSlotKind({
+        place: currentPlace,
+        index,
+        totalStops,
+        lunchPlaceId,
+        dinnerPlaceId,
+      });
+
+      if (previous) {
+        minutesUntilAnchor += buildTransitLeg({
+          from: previous,
+          to: currentPlace,
+          locale: preferences.locale,
+          mobilityMode: preferences.mobilityMode,
+        }).durationMinutes;
+      }
+
+      minutesUntilAnchor += resolveStayMinutes({
+        place: currentPlace,
+        preferences,
+        slotKind,
+        weatherSnapshot,
+      });
+
+      if (index < firstAnchoredIndex - 1) {
+        minutesUntilAnchor += resolvePostStopBufferMinutes(slotKind);
+      }
+    }
+
+    anchorLimitMinutes = Math.min(LATEST_DAY_START_MINUTES, anchorSlotMinutes - minutesUntilAnchor);
+  }
+
+  let cursorMinutes = Math.max(
+    DAY_START_MINUTES,
+    Math.min(targetEndMinutes - estimatedRouteMinutes, anchorLimitMinutes, LATEST_DAY_START_MINUTES)
+  );
+
+  return orderedPlaces.map((place, order) => {
+    const previous = orderedPlaces[order - 1];
+    const transitFromPrevious = previous
+      ? buildTransitLeg({
+          from: previous,
+          to: place,
+          locale: preferences.locale,
+          mobilityMode: preferences.mobilityMode,
+        })
+      : undefined;
+    const slotKind = resolveStopSlotKind({
+      place,
+      index: order,
+      totalStops,
+      lunchPlaceId,
+      dinnerPlaceId,
+    });
+
+    if (transitFromPrevious) {
+      cursorMinutes += transitFromPrevious.durationMinutes;
+    }
+
+    if (slotKind === "lunch" && cursorMinutes < LUNCH_SLOT_MINUTES) {
+      cursorMinutes = LUNCH_SLOT_MINUTES;
+    } else if (slotKind === "dinner" && cursorMinutes < DINNER_SLOT_MINUTES) {
+      cursorMinutes = DINNER_SLOT_MINUTES;
+    } else if (slotKind === "night" && cursorMinutes < NIGHT_SLOT_MINUTES) {
+      cursorMinutes = NIGHT_SLOT_MINUTES;
+    }
+
+    const startTime = toIsoAtMinutes(dayDateLabel, cursorMinutes);
+    cursorMinutes += resolveStayMinutes({
+      place,
+      preferences,
+      slotKind,
+      weatherSnapshot,
+    });
+    const endTime = toIsoAtMinutes(dayDateLabel, cursorMinutes);
+
+    if (order < totalStops - 1) {
+      cursorMinutes += resolvePostStopBufferMinutes(slotKind);
+    }
+
+    return {
+      id: `${place.id}-${dayNumber}-${order}`,
+      order: order + 1,
+      date: dayDateLabel,
+      startTime,
+      endTime,
+      highlight: {
+        ko: `${place.district} 핵심 스팟`,
+        en:
+          slotKind === "lunch"
+            ? `Lunch stop in ${place.district}`
+            : slotKind === "dinner"
+              ? `Dinner stop in ${place.district}`
+              : slotKind === "night"
+                ? `Evening stop in ${place.district}`
+                : `Top stop in ${place.district}`,
+      },
+      note: {
+        ko: place.indoor
+          ? "날씨 변화에도 안정적으로 들르기 좋은 실내 스팟이에요."
+          : "현장 상황에 따라 체류 시간을 조금 조정해도 좋아요.",
+        en:
+          slotKind === "lunch"
+            ? "Scheduled around lunch so the route has a natural midday break."
+            : slotKind === "dinner"
+              ? "Placed near dinner time so the evening does not finish too early."
+              : slotKind === "night"
+                ? "Held for the evening so the final stop lands after sunset."
+                : place.indoor
+                  ? "An indoor-friendly stop that stays reliable in changing weather."
+                  : "You can trim the stay slightly if live conditions change.",
+      },
+      place,
+      transitFromPrevious,
+    };
+  });
+};
+
 const buildPlanningDebug = ({
   preferences,
   places,
@@ -443,38 +820,12 @@ Deno.serve(async (request) => {
           ko: weatherSnapshot.signal === "rainy" ? "실내 우선 루트" : "예산 맞춤 부산 루트",
           en: weatherSnapshot.signal === "rainy" ? "Indoor-first route" : "Budget-aware Busan route",
         },
-        stops: dayStops.map((place, order) => {
-          const previous = dayStops[order - 1];
-          const transitFromPrevious = previous
-            ? buildTransitLeg({
-                from: previous,
-                to: place,
-                locale: preferences.locale,
-                mobilityMode: preferences.mobilityMode,
-              })
-            : undefined;
-
-          return {
-            id: `${place.id}-${order}`,
-            order: order + 1,
-            date: dayDateLabel,
-            startTime: `${dayDateLabel}T${String(Math.min(9 + order * 2, 22)).padStart(2, "0")}:00:00+09:00`,
-            endTime: `${dayDateLabel}T${String(Math.min(10 + order * 2, 23)).padStart(2, "0")}:00:00+09:00`,
-            highlight: {
-              ko: `${place.district} 핵심 스팟`,
-              en: `Top stop in ${place.district}`,
-            },
-            note: {
-              ko: place.indoor
-                ? "날씨 변화에도 안정적으로 들르기 좋은 실내 스팟이에요."
-                : "현장 상황에 따라 체류 시간을 조금 조정해도 좋아요.",
-              en: place.indoor
-                ? "An indoor-friendly stop that stays reliable in changing weather."
-                : "You can trim the stay slightly if live conditions change.",
-            },
-            place,
-            transitFromPrevious,
-          };
+        stops: scheduleDayStops({
+          places: dayStops,
+          dayNumber: index + 1,
+          dayDateLabel,
+          preferences,
+          weatherSnapshot,
         }),
       };
     }

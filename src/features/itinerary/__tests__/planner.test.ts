@@ -72,4 +72,22 @@ describe("planner", () => {
     const indoorStops = rainy.days.flatMap((day) => day.stops).filter((stop) => stop.place.indoor);
     expect(indoorStops.length).toBeGreaterThan(0);
   });
+
+  it("keeps food and night routes running into lunch and evening slots", () => {
+    const itinerary = buildFallbackItinerary(preferences, seedPlaces);
+    const allStops = itinerary.days.flatMap((day) => day.stops);
+    const hasLunchSlot = allStops.some((stop) => {
+      const time = stop.startTime.slice(11, 16);
+      return time >= "12:30" && time <= "13:30";
+    });
+    const hasEveningStop = allStops.some((stop) => stop.startTime.slice(11, 16) >= "18:30");
+    const latestEndTime = allStops.reduce(
+      (latest, stop) => (stop.endTime.slice(11, 16) > latest ? stop.endTime.slice(11, 16) : latest),
+      "00:00"
+    );
+
+    expect(hasLunchSlot).toBe(true);
+    expect(hasEveningStop).toBe(true);
+    expect(latestEndTime >= "20:00").toBe(true);
+  });
 });

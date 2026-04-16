@@ -1,4 +1,4 @@
-import { addDays, addMinutes, formatISO, parseISO } from "date-fns";
+import { addDays, addMinutes, differenceInMinutes, formatISO, parseISO } from "date-fns";
 import { getDistance } from "geolib";
 
 import { startAreas } from "../../data/start-areas";
@@ -30,6 +30,14 @@ type ScoredPlace = Place & {
   scoreBreakdown: Record<string, number>;
   distanceFromStartKm: number;
 };
+
+type StopSlotKind = "default" | "lunch" | "dinner" | "night";
+
+const DAY_START_MINUTES = 9 * 60;
+const LATEST_DAY_START_MINUTES = 15 * 60;
+const LUNCH_SLOT_MINUTES = 12 * 60 + 30;
+const DINNER_SLOT_MINUTES = 18 * 60 + 30;
+const NIGHT_SLOT_MINUTES = 19 * 60;
 
 const neutralWeatherSnapshot = (travelDate: string): WeatherSnapshot => ({
   status: "unavailable",
@@ -309,6 +317,176 @@ const orderPlacesForRoute = (places: ScoredPlace[], startArea: StartArea) => {
   return ordered;
 };
 
+const isFoodPlace = (place: Place) => place.categories.includes("food");
+const isNightPlace = (place: Place) => place.categories.includes("night");
+
+const movePlaceById = <T extends Place>(places: T[], placeId: string, targetIndex: number) => {
+  const currentIndex = places.findIndex((place) => place.id === placeId);
+  if (currentIndex === -1) {
+    return places;
+  }
+
+  const next = [...places];
+  const [item] = next.splice(currentIndex, 1);
+  if (!item) {
+    return places;
+  }
+  next.splice(Math.max(0, Math.min(targetIndex, next.length)), 0, item);
+  return next;
+};
+
+const arrangePlacesForDaySchedule = <T extends Place>(places: T[]) => {
+  let ordered = [...places];
+  const nightSet = new Set(ordered.filter((place) => isNightPlace(place)).map((place) => place.id));
+
+  if (nightSet.size > 0) {
+    ordered = [...ordered.filter((place) => !nightSet.has(place.id)), ...ordered.filter((place) => nightSet.has(place.id))];
+  }
+
+  const foodPlaces = ordered.filter((place) => isFoodPlace(place));
+  if (foodPlaces.length === 0) {
+    return ordered;
+  }
+
+  const lunchCandidate = foodPlaces.find((place) => !isNightPlace(place)) ?? foodPlaces[0]!;
+  const lunchIndex = Math.min(Math.max(1, Math.floor(ordered.length / 2) - 1), Math.max(ordered.length - 2, 0));
+  ordered = movePlaceById(ordered, lunchCandidate.id, lunchIndex);
+
+  const dinnerCandidate =
+    [...ordered].reverse().find((place) => isFoodPlace(place) && place.id !== lunchCandidate.id) ??
+    [...ordered].reverse().find((place) => isFoodPlace(place));
+
+  if (dinnerCandidate) {
+    const dinnerIndex = Math.max(ordered.length - (isNightPlace(dinnerCandidate) ? 1 : 2), 0);
+    ordered = movePlaceById(ordered, dinnerCandidate.id, dinnerIndex);
+  }
+
+  return ordered;
+};
+
+const resolveTargetEndMinutes = (places: Place[], preferences: TripPreferences) => {
+  const wantsNight = preferences.interests.includes("night") || places.some((place) => isNightPlace(place));
+
+  if (!wantsNight) {
+    return 20 * 60 + 30;
+  }
+
+  if (preferences.companionType === "friends" || preferences.companionType === "couple") {
+    return 22 * 60;
+  }
+
+  return 21 * 60 + 30;
+};
+
+const resolveMealAnchors = (places: Place[]) => {
+  const foodPlaces = places.filter((place) => isFoodPlace(place));
+  const lunchPlace = foodPlaces.find((place) => !isNightPlace(place)) ?? foodPlaces[0];
+  const dinnerPlace =
+    [...foodPlaces].reverse().find((place) => place.id !== lunchPlace?.id) ??
+    [...foodPlaces].reverse()[0];
+
+  return {
+    lunchPlaceId: lunchPlace?.id,
+    dinnerPlaceId: dinnerPlace?.id,
+  };
+};
+
+const resolveStopSlotKind = ({
+  place,
+  index,
+  totalStops,
+  lunchPlaceId,
+  dinnerPlaceId,
+}: {
+  place: Place;
+  index: number;
+  totalStops: number;
+  lunchPlaceId?: string;
+  dinnerPlaceId?: string;
+}): StopSlotKind => {
+  if (place.id === lunchPlaceId) {
+    return "lunch";
+  }
+
+  if (place.id === dinnerPlaceId && isFoodPlace(place) && !isNightPlace(place)) {
+    return "dinner";
+  }
+
+  if (isNightPlace(place) && index >= Math.max(totalStops - 2, 0)) {
+    return "night";
+  }
+
+  if (place.id === dinnerPlaceId && (isNightPlace(place) || index === totalStops - 1)) {
+    return isNightPlace(place) ? "night" : "dinner";
+  }
+
+  return "default";
+};
+
+const resolveStayMinutes = ({
+  place,
+  preferences,
+  slotKind,
+  weatherSnapshot,
+}: {
+  place: Place;
+  preferences: TripPreferences;
+  slotKind: StopSlotKind;
+  weatherSnapshot?: WeatherSnapshot;
+}) => {
+  let minutes = place.recommendedStayMinutes;
+
+  if (place.categories.includes("culture") && place.indoor) {
+    minutes = Math.max(minutes, 85);
+  }
+
+  if (place.categories.includes("history")) {
+    minutes += 10;
+  }
+
+  if (place.categories.includes("photospot") || place.categories.includes("nature")) {
+    minutes += 10;
+  }
+
+  if (weatherSnapshot?.signal === "clear" && place.categories.includes("nature")) {
+    minutes += 10;
+  }
+
+  if (slotKind === "lunch") {
+    minutes = Math.max(minutes, 75);
+  }
+
+  if (slotKind === "dinner") {
+    minutes = Math.max(minutes, 85);
+  }
+
+  if (slotKind === "night") {
+    minutes = Math.max(minutes, 95);
+  }
+
+  if (preferences.mobilityMode === "walk") {
+    minutes = Math.min(minutes, 95);
+  }
+
+  return minutes;
+};
+
+const resolvePostStopBufferMinutes = (slotKind: StopSlotKind) => {
+  switch (slotKind) {
+    case "night":
+      return 10;
+    case "dinner":
+      return 15;
+    default:
+      return 25;
+  }
+};
+
+const alignCursorToMinutes = (cursor: Date, dayStart: Date, slotMinutes: number) => {
+  const currentMinutes = differenceInMinutes(cursor, dayStart);
+  return currentMinutes < slotMinutes ? addMinutes(dayStart, slotMinutes) : cursor;
+};
+
 const chunkByDays = (places: Place[], tripDays: number) => {
   const buckets: Place[][] = [];
   const baseSize = Math.floor(places.length / tripDays);
@@ -360,25 +538,143 @@ const createDayStops = (
   places: Place[],
   dayIndex: number,
   preferences: TripPreferences,
-  locale: AppLocale
+  locale: AppLocale,
+  weatherSnapshot?: WeatherSnapshot
 ): ItineraryStop[] => {
-  let cursor = parseISO(`${preferences.travelDate}T09:00:00+09:00`);
-  cursor = addDays(cursor, dayIndex);
+  const orderedPlaces = arrangePlacesForDaySchedule(places);
+  const dayStart = addDays(parseISO(`${preferences.travelDate}T00:00:00+09:00`), dayIndex);
+  const { lunchPlaceId, dinnerPlaceId } = resolveMealAnchors(orderedPlaces);
+  const totalStops = orderedPlaces.length;
+  const targetEndMinutes = resolveTargetEndMinutes(orderedPlaces, preferences);
+  const estimatedRouteMinutes = orderedPlaces.reduce((total, place, index) => {
+    const previous = orderedPlaces[index - 1];
+    const transitDurationMinutes = previous
+      ? buildTransitLeg(previous, place, locale, "fallback", preferences.mobilityMode).durationMinutes
+      : 0;
+    const slotKind = resolveStopSlotKind({
+      place,
+      index,
+      totalStops,
+      lunchPlaceId,
+      dinnerPlaceId,
+    });
+    return (
+      total +
+      transitDurationMinutes +
+      resolveStayMinutes({
+        place,
+        preferences,
+        slotKind,
+        weatherSnapshot,
+      }) +
+      (index < totalStops - 1 ? resolvePostStopBufferMinutes(slotKind) : 0)
+    );
+  }, 0);
+  const firstAnchoredIndex = orderedPlaces.findIndex((place, index) => {
+    const slotKind = resolveStopSlotKind({
+      place,
+      index,
+      totalStops,
+      lunchPlaceId,
+      dinnerPlaceId,
+    });
+    return slotKind !== "default";
+  });
+  let anchorLimitMinutes = LATEST_DAY_START_MINUTES;
 
-  return places.map((place, index) => {
-    const previous = places[index - 1];
+  if (firstAnchoredIndex >= 0) {
+    const anchorPlace = orderedPlaces[firstAnchoredIndex]!;
+    const anchorSlotKind = resolveStopSlotKind({
+      place: anchorPlace,
+      index: firstAnchoredIndex,
+      totalStops,
+      lunchPlaceId,
+      dinnerPlaceId,
+    });
+    const anchorSlotMinutes =
+      anchorSlotKind === "lunch"
+        ? LUNCH_SLOT_MINUTES
+        : anchorSlotKind === "dinner"
+          ? DINNER_SLOT_MINUTES
+          : NIGHT_SLOT_MINUTES;
+    let minutesUntilAnchor = 0;
+
+    for (let index = 0; index < firstAnchoredIndex; index += 1) {
+      const currentPlace = orderedPlaces[index]!;
+      const previous = orderedPlaces[index - 1];
+      const slotKind = resolveStopSlotKind({
+        place: currentPlace,
+        index,
+        totalStops,
+        lunchPlaceId,
+        dinnerPlaceId,
+      });
+
+      if (previous) {
+        minutesUntilAnchor += buildTransitLeg(previous, currentPlace, locale, "fallback", preferences.mobilityMode).durationMinutes;
+      }
+
+      minutesUntilAnchor += resolveStayMinutes({
+        place: currentPlace,
+        preferences,
+        slotKind,
+        weatherSnapshot,
+      });
+
+      if (index < firstAnchoredIndex - 1) {
+        minutesUntilAnchor += resolvePostStopBufferMinutes(slotKind);
+      }
+    }
+
+    anchorLimitMinutes = Math.min(LATEST_DAY_START_MINUTES, anchorSlotMinutes - minutesUntilAnchor);
+  }
+
+  const initialStartMinutes = Math.max(
+    DAY_START_MINUTES,
+    Math.min(targetEndMinutes - estimatedRouteMinutes, anchorLimitMinutes, LATEST_DAY_START_MINUTES)
+  );
+  let cursor = addMinutes(dayStart, initialStartMinutes);
+
+  return orderedPlaces.map((place, index) => {
+    const previous = orderedPlaces[index - 1];
     const transit = previous
       ? buildTransitLeg(previous, place, locale, "fallback", preferences.mobilityMode)
       : undefined;
+    const slotKind = resolveStopSlotKind({
+      place,
+      index,
+      totalStops,
+      lunchPlaceId,
+      dinnerPlaceId,
+    });
 
     if (transit) {
       cursor = addMinutes(cursor, transit.durationMinutes);
     }
 
+    if (slotKind === "lunch") {
+      cursor = alignCursorToMinutes(cursor, dayStart, LUNCH_SLOT_MINUTES);
+    } else if (slotKind === "dinner") {
+      cursor = alignCursorToMinutes(cursor, dayStart, DINNER_SLOT_MINUTES);
+    } else if (slotKind === "night") {
+      cursor = alignCursorToMinutes(cursor, dayStart, NIGHT_SLOT_MINUTES);
+    }
+
     const startTime = formatISO(cursor);
-    cursor = addMinutes(cursor, place.recommendedStayMinutes);
+    cursor = addMinutes(
+      cursor,
+      resolveStayMinutes({
+        place,
+        preferences,
+        slotKind,
+        weatherSnapshot,
+      })
+    );
     const endTime = formatISO(cursor);
-    cursor = addMinutes(cursor, 25);
+
+    if (index < totalStops - 1) {
+      cursor = addMinutes(cursor, resolvePostStopBufferMinutes(slotKind));
+    }
 
     return {
       id: createId(),
@@ -499,6 +795,7 @@ const buildPlanningDebug = ({
     notes: [
       `${engine} planner debug snapshot`,
       `Selection strategy ${selectedStrategy}`,
+      "Timed with lunch, dinner, and evening anchors when available.",
       trimmedCount > 0 ? `${trimmedCount} budget-selected candidates were trimmed.` : "No route trimming was required.",
     ],
   };
@@ -613,7 +910,7 @@ export const buildFallbackItinerary = (
   const days: ItineraryDay[] = dayBuckets.map((bucket, index) => ({
     dayNumber: index + 1,
     theme: dayTheme(bucket),
-    stops: createDayStops(bucket, index, normalizedPreferences, locale),
+    stops: createDayStops(bucket, index, normalizedPreferences, locale, weatherSnapshot),
   }));
   const planningMeta = buildPlanningMeta({
     days,
