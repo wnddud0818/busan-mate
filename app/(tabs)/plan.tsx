@@ -9,7 +9,7 @@ import { TripPreferencesForm } from "../../src/components/forms/trip-preferences
 import { ItineraryCard } from "../../src/components/itinerary/itinerary-card";
 import { generateItinerary } from "../../src/services/itinerary-service";
 import { useAppStore } from "../../src/stores/app-store";
-import { colors } from "../../src/theme/tokens";
+import { useColors } from "../../src/theme/use-colors";
 import { TripPreferences } from "../../src/types/domain";
 
 export default function PlanTab() {
@@ -18,6 +18,7 @@ export default function PlanTab() {
   const notices = useAppStore((state) => state.notices);
   const { upsertItinerary, setNotices } = useAppStore((state) => state.actions);
   const { t } = useTranslation();
+  const colors = useColors();
 
   const itineraryMutation = useMutation({
     mutationFn: (values: TripPreferences) => generateItinerary(values),

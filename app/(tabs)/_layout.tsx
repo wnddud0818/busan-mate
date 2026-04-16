@@ -3,7 +3,7 @@ import { Tabs } from "expo-router";
 import { Platform, StyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 
-import { colors } from "../../src/theme/tokens";
+import { useColors } from "../../src/theme/use-colors";
 
 function TabIcon({
   name,
@@ -16,8 +16,9 @@ function TabIcon({
   label: string;
   focused: boolean;
 }) {
+  const colors = useColors();
   return (
-    <View style={[styles.tabItem, focused && styles.tabItemFocused]}>
+    <View style={[styles.tabItem, focused && { backgroundColor: `${colors.coral}1E` }]}>
       <Feather name={name} size={20} color={color} />
       <Text style={[styles.tabLabel, { color }]}>{label}</Text>
     </View>
@@ -26,6 +27,7 @@ function TabIcon({
 
 export default function TabsLayout() {
   const { t } = useTranslation();
+  const colors = useColors();
 
   return (
     <Tabs
@@ -33,16 +35,16 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarShowLabel: false,
         tabBarStyle: {
-          backgroundColor: "#0A1A24",
+          backgroundColor: colors.surface,
           borderTopWidth: 1,
-          borderTopColor: "rgba(255,255,255,0.08)",
+          borderTopColor: colors.line,
           height: Platform.OS === "ios" ? 84 : 60,
           paddingBottom: Platform.OS === "ios" ? 24 : 6,
           paddingTop: 6,
           elevation: 0,
         },
         tabBarActiveTintColor: colors.coral,
-        tabBarInactiveTintColor: "rgba(248,251,253,0.36)",
+        tabBarInactiveTintColor: colors.fog,
       }}
     >
       <Tabs.Screen
@@ -65,12 +67,7 @@ export default function TabsLayout() {
         name="ranking"
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon
-              name="trending-up"
-              color={color}
-              label={t("tabs.ranking")}
-              focused={focused}
-            />
+            <TabIcon name="trending-up" color={color} label={t("tabs.ranking")} focused={focused} />
           ),
         }}
       />
@@ -86,9 +83,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 12,
-  },
-  tabItemFocused: {
-    backgroundColor: "rgba(255,122,69,0.12)",
   },
   tabLabel: {
     fontSize: 10,

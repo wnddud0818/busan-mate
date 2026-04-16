@@ -2,7 +2,8 @@ import { Feather } from "@expo/vector-icons";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { colors, radii, spacing } from "../../theme/tokens";
+import { radii, spacing } from "../../theme/tokens";
+import { useColors } from "../../theme/use-colors";
 
 export const GuestUpgradeCard = ({
   locale,
@@ -11,6 +12,7 @@ export const GuestUpgradeCard = ({
   locale: "ko" | "en";
   onSend: (email: string) => Promise<void>;
 }) => {
+  const colors = useColors();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -26,17 +28,16 @@ export const GuestUpgradeCard = ({
   };
 
   return (
-    <View style={styles.card}>
-      {/* 헤더 */}
+    <View style={[styles.card, { backgroundColor: colors.mintLight, borderColor: colors.mintBorder }]}>
       <View style={styles.headerRow}>
-        <View style={styles.iconCircle}>
+        <View style={[styles.iconCircle, { backgroundColor: colors.mintLight, borderColor: colors.mintBorder }]}>
           <Feather name="user-check" size={18} color={colors.mint} />
         </View>
         <View style={styles.headerText}>
-          <Text style={styles.title}>
+          <Text style={[styles.title, { color: colors.cloud }]}>
             {locale === "ko" ? "계정 업그레이드" : "Upgrade account"}
           </Text>
-          <Text style={styles.copy}>
+          <Text style={[styles.copy, { color: colors.mist }]}>
             {locale === "ko"
               ? "이메일 링크로 로그인하면 일정 공유와 평점 작성이 가능해요."
               : "Sign in with a magic link to publish routes and leave ratings."}
@@ -44,7 +45,6 @@ export const GuestUpgradeCard = ({
         </View>
       </View>
 
-      {/* 입력 */}
       <TextInput
         nativeID="guest-upgrade-email-input"
         value={email}
@@ -53,17 +53,16 @@ export const GuestUpgradeCard = ({
         placeholderTextColor={colors.fog}
         autoCapitalize="none"
         keyboardType="email-address"
-        style={styles.input}
+        style={[styles.input, { borderColor: colors.lineBright, backgroundColor: colors.input, color: colors.cloud }]}
       />
 
-      {/* 버튼 */}
       <Pressable
         onPress={submit}
-        style={[styles.button, loading && styles.buttonDisabled]}
+        style={[styles.button, { backgroundColor: colors.mint }, loading && styles.buttonDisabled]}
         disabled={loading}
       >
         <Feather name="send" size={15} color={colors.navy} />
-        <Text style={styles.buttonText}>
+        <Text style={[styles.buttonText, { color: colors.navy }]}>
           {loading
             ? locale === "ko" ? "전송 중..." : "Sending..."
             : locale === "ko" ? "매직 링크 보내기" : "Send magic link"}
@@ -75,10 +74,8 @@ export const GuestUpgradeCard = ({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.mintLight,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.mintBorder,
     padding: spacing.lg,
     gap: spacing.md,
   },
@@ -91,9 +88,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "rgba(95,209,194,0.16)",
     borderWidth: 1,
-    borderColor: colors.mintBorder,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -102,28 +97,22 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   title: {
-    color: colors.cloud,
     fontSize: 15,
     fontWeight: "800",
   },
   copy: {
-    color: "rgba(248,251,253,0.74)",
     fontSize: 13,
     lineHeight: 19,
   },
   input: {
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    color: colors.cloud,
-    backgroundColor: "rgba(255,255,255,0.08)",
     fontSize: 14,
   },
   button: {
     borderRadius: radii.md,
-    backgroundColor: colors.mint,
     paddingVertical: spacing.md,
     alignItems: "center",
     justifyContent: "center",
@@ -134,7 +123,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: colors.navy,
     fontWeight: "800",
     fontSize: 15,
   },

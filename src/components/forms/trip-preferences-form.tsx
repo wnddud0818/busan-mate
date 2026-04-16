@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { addDays, format } from "date-fns";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { z } from "zod";
@@ -12,7 +12,8 @@ import { deriveBudgetLevel, makeBudgetLabel } from "../../features/itinerary/pla
 import { fetchWeatherSnapshot } from "../../services/weather-service";
 import { AppLocale, InterestTag, TripPreferences } from "../../types/domain";
 import { formatKrwCompact } from "../../utils/currency";
-import { colors, radii, spacing } from "../../theme/tokens";
+import { ColorPalette, radii, spacing } from "../../theme/tokens";
+import { useColors } from "../../theme/use-colors";
 import { Pill } from "../common/pill";
 
 const optionLabel = {
@@ -75,6 +76,75 @@ const numericValue = (text: string) => {
   return Number(digits || 0);
 };
 
+const makeStyles = (c: ColorPalette) =>
+  StyleSheet.create({
+    wrapper: { gap: spacing.sm },
+    stepHeader: { gap: spacing.sm, paddingHorizontal: 2 },
+    formTitle: { color: c.cloud, fontSize: 17, fontWeight: "800", letterSpacing: -0.2 },
+    progressTrack: {
+      height: 3,
+      backgroundColor: c.lineBright,
+      borderRadius: 2,
+      overflow: "hidden",
+    },
+    progressFill: { width: "50%", height: "100%", backgroundColor: c.coral, borderRadius: 2 },
+    progressFull: { width: "100%" },
+    stepRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+    stepBadge: {
+      width: 24, height: 24, borderRadius: 12, borderWidth: 1,
+      borderColor: c.line, alignItems: "center", justifyContent: "center",
+      backgroundColor: c.glass,
+    },
+    stepBadgeActive: { backgroundColor: c.coral, borderColor: c.coral },
+    stepBadgeText: { color: c.mist, fontSize: 11, fontWeight: "800" },
+    stepBadgeTextActive: { color: c.navy },
+    stepHint: { color: c.mist, fontSize: 12, fontWeight: "600" },
+    card: {
+      backgroundColor: c.surface, borderRadius: radii.lg, borderWidth: 1,
+      borderColor: c.line, padding: spacing.lg,
+    },
+    block: { gap: spacing.md },
+    rowWrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+    label: { color: c.cloud, fontSize: 14, fontWeight: "700" },
+    field: { gap: spacing.sm },
+    input: {
+      backgroundColor: c.input, borderRadius: radii.md, borderWidth: 1,
+      borderColor: c.line, color: c.cloud,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.md, fontSize: 15,
+    },
+    switchRow: {
+      flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+      gap: spacing.md, paddingVertical: spacing.xs,
+    },
+    switchCopy: { flex: 1, gap: 4 },
+    switchHint: { color: c.mist, fontSize: 12, lineHeight: 18 },
+    previewCard: {
+      backgroundColor: c.glass, borderRadius: radii.md, borderWidth: 1,
+      borderColor: c.line, padding: spacing.md, gap: 5,
+    },
+    weatherCard: { backgroundColor: c.mintLight, borderColor: c.mintBorder },
+    previewLabel: {
+      color: c.mint, fontSize: 11, fontWeight: "800",
+      textTransform: "uppercase", letterSpacing: 0.6,
+    },
+    previewValue: { color: c.cloud, fontSize: 15, fontWeight: "800", lineHeight: 22 },
+    previewHint: { color: c.mist, fontSize: 12, lineHeight: 18 },
+    actionRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs },
+    backButton: {
+      borderRadius: radii.md, borderWidth: 1, borderColor: c.line,
+      paddingVertical: spacing.md, paddingHorizontal: spacing.lg,
+      alignItems: "center", justifyContent: "center", backgroundColor: c.glass,
+    },
+    backButtonText: { color: c.cloud, fontWeight: "700", fontSize: 14 },
+    primaryButton: {
+      marginTop: spacing.xs, backgroundColor: c.coral,
+      borderRadius: radii.md, paddingVertical: spacing.md, alignItems: "center",
+    },
+    primaryButtonText: { color: c.navy, fontSize: 15, fontWeight: "800" },
+    flex1: { flex: 1, marginTop: 0 },
+    disabled: { opacity: 0.6 },
+  });
+
 export const TripPreferencesForm = ({
   locale,
   onSubmit,
@@ -84,7 +154,10 @@ export const TripPreferencesForm = ({
   onSubmit: (values: TripPreferences) => void;
   isSubmitting: boolean;
 }) => {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [step, setStep] = useState<1 | 2>(1);
+
   const { control, handleSubmit, setValue, watch } = useForm<FormValues>({
     resolver: zodResolver(tripPreferencesSchema),
     defaultValues: {
@@ -134,7 +207,6 @@ export const TripPreferencesForm = ({
         <Text style={styles.formTitle}>
           {locale === "ko" ? "예산 우선 플랜" : "Budget-first planning"}
         </Text>
-        {/* 진행 바 */}
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, step === 2 && styles.progressFull]} />
         </View>
@@ -367,25 +439,16 @@ export const TripPreferencesForm = ({
                 {locale === "ko" ? "관심사" : "Interests"}
               </Text>
               <View style={styles.rowWrap}>
-                {(
-                  [
-                    "food",
-                    "culture",
-                    "nature",
-                    "photospot",
-                    "shopping",
-                    "history",
-                    "night",
-                    "healing",
-                  ] as const
-                ).map((interest) => (
-                  <Pill
-                    key={interest}
-                    label={localized("interests", interest, locale)}
-                    selected={selectedInterests.includes(interest)}
-                    onPress={() => toggleInterest(interest)}
-                  />
-                ))}
+                {(["food", "culture", "nature", "photospot", "shopping", "history", "night", "healing"] as const).map(
+                  (interest) => (
+                    <Pill
+                      key={interest}
+                      label={localized("interests", interest, locale)}
+                      selected={selectedInterests.includes(interest)}
+                      onPress={() => toggleInterest(interest)}
+                    />
+                  )
+                )}
               </View>
             </View>
 
@@ -425,7 +488,7 @@ export const TripPreferencesForm = ({
                   <Switch
                     value={value}
                     onValueChange={onChange}
-                    trackColor={{ true: colors.coral, false: "rgba(255,255,255,0.14)" }}
+                    trackColor={{ true: colors.coral, false: colors.lineBright }}
                     thumbColor={value ? colors.sand : colors.smoke}
                   />
                 </View>
@@ -451,7 +514,7 @@ export const TripPreferencesForm = ({
                   <Switch
                     value={value}
                     onValueChange={onChange}
-                    trackColor={{ true: colors.mint, false: "rgba(255,255,255,0.14)" }}
+                    trackColor={{ true: colors.mint, false: colors.lineBright }}
                     thumbColor={value ? colors.navy : colors.smoke}
                   />
                 </View>
@@ -483,184 +546,3 @@ export const TripPreferencesForm = ({
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  wrapper: {
-    gap: spacing.sm,
-  },
-  stepHeader: {
-    gap: spacing.sm,
-    paddingHorizontal: 2,
-  },
-  formTitle: {
-    color: colors.cloud,
-    fontSize: 17,
-    fontWeight: "800",
-    letterSpacing: -0.2,
-  },
-  progressTrack: {
-    height: 3,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    borderRadius: 2,
-    overflow: "hidden",
-  },
-  progressFill: {
-    width: "50%",
-    height: "100%",
-    backgroundColor: colors.coral,
-    borderRadius: 2,
-  },
-  progressFull: {
-    width: "100%",
-  },
-  stepRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  stepBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.line,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
-  stepBadgeActive: {
-    backgroundColor: colors.coral,
-    borderColor: colors.coral,
-  },
-  stepBadgeText: {
-    color: colors.mist,
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  stepBadgeTextActive: {
-    color: colors.navy,
-  },
-  stepHint: {
-    color: colors.mist,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  card: {
-    backgroundColor: "rgba(255,255,255,0.07)",
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: spacing.lg,
-  },
-  block: {
-    gap: spacing.md,
-  },
-  rowWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  label: {
-    color: colors.cloud,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  field: {
-    gap: spacing.sm,
-  },
-  input: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.line,
-    color: colors.cloud,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: 15,
-  },
-  switchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  switchCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  switchHint: {
-    color: colors.mist,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  previewCard: {
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: spacing.md,
-    gap: 5,
-  },
-  weatherCard: {
-    backgroundColor: colors.mintLight,
-    borderColor: colors.mintBorder,
-  },
-  previewLabel: {
-    color: colors.mint,
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  previewValue: {
-    color: colors.cloud,
-    fontSize: 15,
-    fontWeight: "800",
-    lineHeight: 22,
-  },
-  previewHint: {
-    color: colors.mist,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  backButton: {
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
-  backButtonText: {
-    color: colors.cloud,
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  primaryButton: {
-    marginTop: spacing.xs,
-    backgroundColor: colors.coral,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-  },
-  primaryButtonText: {
-    color: colors.navy,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  flex1: {
-    flex: 1,
-    marginTop: 0,
-  },
-  disabled: {
-    opacity: 0.6,
-  },
-});

@@ -1,12 +1,14 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
+import { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { useAppStore } from "../src/stores/app-store";
-import { colors, radii, spacing } from "../src/theme/tokens";
+import { ColorPalette, radii, spacing } from "../src/theme/tokens";
+import { useColors, useGradient } from "../src/theme/use-colors";
 
 const FEATURES = [
   {
@@ -26,13 +28,58 @@ const FEATURES = [
   },
 ];
 
+const makeStyles = (c: ColorPalette) =>
+  StyleSheet.create({
+    root: { flex: 1 },
+    safe: { flex: 1 },
+    scroll: {
+      paddingHorizontal: spacing.lg,
+      paddingBottom: spacing.xxl + 8,
+      gap: spacing.xl,
+    },
+    hero: { alignItems: "center", paddingTop: spacing.xxl + 8, gap: spacing.md },
+    logoBox: { width: 76, height: 76, borderRadius: 22, alignItems: "center", justifyContent: "center", marginBottom: spacing.xs },
+    appName: { color: c.coral, fontSize: 14, fontWeight: "800", letterSpacing: 3, textTransform: "uppercase" },
+    heroTitle: { color: c.cloud, fontSize: 26, fontWeight: "900", letterSpacing: -0.6, textAlign: "center", lineHeight: 34 },
+    heroSub: { color: c.mist, fontSize: 15, textAlign: "center", lineHeight: 23, paddingHorizontal: spacing.md },
+    section: { gap: spacing.md },
+    sectionLabel: { color: c.fog, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2 },
+    langRow: { flexDirection: "row", gap: spacing.sm },
+    langButton: {
+      flex: 1, paddingVertical: spacing.md, borderRadius: radii.md, borderWidth: 1,
+      borderColor: c.line, backgroundColor: c.glass,
+      alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8,
+    },
+    langSelected: { backgroundColor: c.coral, borderColor: c.coral },
+    langFlag: { fontSize: 22 },
+    langText: { color: c.mist, fontWeight: "700", fontSize: 15 },
+    langTextSelected: { color: c.navy },
+    featureRow: { flexDirection: "row", gap: spacing.md, alignItems: "flex-start" },
+    featureIcon: {
+      width: 38, height: 38, borderRadius: radii.sm,
+      backgroundColor: c.coralLight, borderWidth: 1, borderColor: c.coralBorder,
+      alignItems: "center", justifyContent: "center", flexShrink: 0,
+    },
+    featureCopy: { color: c.mist, fontSize: 14, lineHeight: 21, flex: 1 },
+    cta: {
+      backgroundColor: c.coral, borderRadius: radii.md,
+      paddingVertical: spacing.lg, flexDirection: "row",
+      alignItems: "center", justifyContent: "center", gap: spacing.sm,
+    },
+    ctaPressed: { opacity: 0.88 },
+    ctaText: { color: c.navy, fontSize: 17, fontWeight: "900", letterSpacing: -0.2 },
+  });
+
 export default function OnboardingPage() {
+  const colors = useColors();
+  const gradient = useGradient();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const locale = useAppStore((state) => state.locale);
   const { completeOnboarding, setLocale } = useAppStore((state) => state.actions);
   const { t } = useTranslation();
 
   return (
-    <LinearGradient colors={["#071120", "#0E2438", "#1A3E57"]} style={styles.root}>
+    <LinearGradient colors={gradient} style={styles.root}>
       <SafeAreaView style={styles.safe}>
         <ScrollView
           contentContainerStyle={styles.scroll}
@@ -103,139 +150,3 @@ export default function OnboardingPage() {
     </LinearGradient>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  safe: { flex: 1 },
-  scroll: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl + 8,
-    gap: spacing.xl,
-  },
-
-  // 히어로
-  hero: {
-    alignItems: "center",
-    paddingTop: spacing.xxl + 8,
-    gap: spacing.md,
-  },
-  logoBox: {
-    width: 76,
-    height: 76,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.xs,
-  },
-  appName: {
-    color: colors.coral,
-    fontSize: 14,
-    fontWeight: "800",
-    letterSpacing: 3,
-    textTransform: "uppercase",
-  },
-  heroTitle: {
-    color: colors.cloud,
-    fontSize: 26,
-    fontWeight: "900",
-    letterSpacing: -0.6,
-    textAlign: "center",
-    lineHeight: 34,
-  },
-  heroSub: {
-    color: colors.mist,
-    fontSize: 15,
-    textAlign: "center",
-    lineHeight: 23,
-    paddingHorizontal: spacing.md,
-  },
-
-  // 섹션
-  section: {
-    gap: spacing.md,
-  },
-  sectionLabel: {
-    color: colors.fog,
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 1.2,
-  },
-
-  // 언어 선택
-  langRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  langButton: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.06)",
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
-  },
-  langSelected: {
-    backgroundColor: colors.coral,
-    borderColor: colors.coral,
-  },
-  langFlag: {
-    fontSize: 22,
-  },
-  langText: {
-    color: "rgba(248,251,253,0.82)",
-    fontWeight: "700",
-    fontSize: 15,
-  },
-  langTextSelected: {
-    color: colors.navy,
-  },
-
-  // 기능 목록
-  featureRow: {
-    flexDirection: "row",
-    gap: spacing.md,
-    alignItems: "flex-start",
-  },
-  featureIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: radii.sm,
-    backgroundColor: colors.coralLight,
-    borderWidth: 1,
-    borderColor: colors.coralBorder,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 2,
-  },
-  featureCopy: {
-    flex: 1,
-    color: "rgba(248,251,253,0.82)",
-    fontSize: 14,
-    lineHeight: 22,
-  },
-
-  // CTA
-  cta: {
-    backgroundColor: colors.coral,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md + 2,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-  },
-  ctaPressed: {
-    opacity: 0.88,
-  },
-  ctaText: {
-    color: colors.navy,
-    fontWeight: "900",
-    fontSize: 17,
-    letterSpacing: -0.3,
-  },
-});

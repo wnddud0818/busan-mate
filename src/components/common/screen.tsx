@@ -6,7 +6,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DebugPanel } from "./debug-panel";
-import { colors, spacing } from "../../theme/tokens";
+import { spacing } from "../../theme/tokens";
+import { useColors, useGradient } from "../../theme/use-colors";
 
 interface ScreenProps {
   title: string;
@@ -17,17 +18,28 @@ interface ScreenProps {
 }
 
 export const Screen = ({ title, subtitle, children, scroll = true, showBack = false }: ScreenProps) => {
+  const colors = useColors();
+  const gradient = useGradient();
+
   const content = (
     <View style={styles.content}>
       <View style={styles.header}>
-        {showBack ? (
-          <Pressable style={styles.backButton} onPress={() => router.back()}>
-            <Feather name="arrow-left" size={20} color={colors.cloud} />
-            <Text style={styles.backLabel}>뒤로</Text>
+        <View style={styles.headerRow}>
+          {showBack ? (
+            <Pressable style={styles.backButton} onPress={() => router.back()}>
+              <Feather name="arrow-left" size={20} color={colors.cloud} />
+              <Text style={[styles.backLabel, { color: colors.cloud }]}>뒤로</Text>
+            </Pressable>
+          ) : <View />}
+          <Pressable
+            style={[styles.themeToggle, { backgroundColor: colors.glass, borderColor: colors.lineBright }]}
+            onPress={() => router.push("/settings")}
+          >
+            <Feather name="settings" size={15} color={colors.cloud} />
           </Pressable>
-        ) : null}
-        <Text style={styles.title}>{title}</Text>
-        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        </View>
+        <Text style={[styles.title, { color: colors.cloud }]}>{title}</Text>
+        {subtitle ? <Text style={[styles.subtitle, { color: colors.mist }]}>{subtitle}</Text> : null}
       </View>
       <DebugPanel />
       {children}
@@ -35,7 +47,7 @@ export const Screen = ({ title, subtitle, children, scroll = true, showBack = fa
   );
 
   return (
-    <LinearGradient colors={["#071120", "#0E2438", "#1A3E57"]} style={styles.root}>
+    <LinearGradient colors={gradient} style={styles.root}>
       <SafeAreaView style={styles.safe}>
         {scroll ? (
           <ScrollView
@@ -73,27 +85,36 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
     gap: 6,
   },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+  },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    alignSelf: "flex-start",
-    marginBottom: spacing.sm,
     paddingVertical: 4,
   },
   backLabel: {
-    color: colors.cloud,
     fontSize: 14,
     fontWeight: "600",
   },
+  themeToggle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   title: {
-    color: colors.cloud,
     fontSize: 30,
     fontWeight: "800",
     letterSpacing: -0.6,
   },
   subtitle: {
-    color: colors.mist,
     fontSize: 14,
     lineHeight: 22,
     paddingRight: spacing.md,

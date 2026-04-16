@@ -8,7 +8,8 @@ import { Screen } from "../../src/components/common/screen";
 import { RankingCard } from "../../src/components/ranking/ranking-card";
 import { loadRankings } from "../../src/services/ranking-service";
 import { useAppStore } from "../../src/stores/app-store";
-import { colors, spacing } from "../../src/theme/tokens";
+import { spacing } from "../../src/theme/tokens";
+import { useColors } from "../../src/theme/use-colors";
 
 export default function RankingTab() {
   const locale = useAppStore((state) => state.locale);
@@ -17,6 +18,7 @@ export default function RankingTab() {
   const rankings = useAppStore((state) => state.rankings);
   const { refreshRankings } = useAppStore((state) => state.actions);
   const { t } = useTranslation();
+  const colors = useColors();
 
   const sharedSignature = sharedItineraries
     .map((item) => `${item.id}:${item.ratingAverage}:${item.currentTravelers}:${item.score}`)
@@ -52,7 +54,7 @@ export default function RankingTab() {
             gap: spacing.md,
           }}
         >
-          <Feather name="trending-up" size={44} color="rgba(248,251,253,0.18)" />
+          <Feather name="trending-up" size={44} color={colors.lineBright} />
           <Text style={{ color: colors.mist, textAlign: "center", lineHeight: 22, fontSize: 14 }}>
             {locale === "ko" ? "아직 랭킹 데이터가 없어요." : "No ranking data yet."}
           </Text>

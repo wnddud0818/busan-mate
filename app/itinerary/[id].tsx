@@ -18,21 +18,19 @@ import { publishItinerary } from "../../src/services/publish-service";
 import { rateItinerary } from "../../src/services/rating-service";
 import { syncLiveSession } from "../../src/services/session-service";
 import { useAppStore } from "../../src/stores/app-store";
-import { colors, radii, spacing } from "../../src/theme/tokens";
+import { radii, spacing } from "../../src/theme/tokens";
+import { useColors } from "../../src/theme/use-colors";
 import { formatKrwCompact, formatKrwFull } from "../../src/utils/currency";
 
 export default function ItineraryDetailPage() {
   const params = useLocalSearchParams<{ id: string }>();
+  const colors = useColors();
   const locale = useAppStore((state) => state.locale);
   const itinerary = useAppStore((state) => state.itineraries.find((item) => item.id === params.id));
   const profile = useAppStore((state) => state.userProfile);
   const {
-    startSession,
-    updateSession,
-    setUserProfile,
-    upsertItinerary,
-    upsertSharedItinerary,
-    setLocationConsent,
+    startSession, updateSession, setUserProfile,
+    upsertItinerary, upsertSharedItinerary, setLocationConsent,
   } = useAppStore((state) => state.actions);
   const { t } = useTranslation();
 
@@ -87,19 +85,13 @@ export default function ItineraryDetailPage() {
 
   const placeSpendTotalKrw = itinerary.days.reduce(
     (total, day) =>
-      total +
-      day.stops.reduce(
-        (dayTotal, stop) => dayTotal + stop.place.estimatedSpendKrw * itinerary.preferences.partySize,
-        0
-      ),
+      total + day.stops.reduce((dayTotal, stop) => dayTotal + stop.place.estimatedSpendKrw * itinerary.preferences.partySize, 0),
     0
   );
   const transitSpendTotalKrw = itinerary.days.reduce(
     (total, day) =>
-      total +
-      day.stops.reduce(
-        (dayTotal, stop) =>
-          dayTotal + (stop.transitFromPrevious?.estimatedFareKrw ?? 0) * itinerary.preferences.partySize,
+      total + day.stops.reduce(
+        (dayTotal, stop) => dayTotal + (stop.transitFromPrevious?.estimatedFareKrw ?? 0) * itinerary.preferences.partySize,
         0
       ),
     0
@@ -120,9 +112,7 @@ export default function ItineraryDetailPage() {
     upsertItinerary(result.itinerary);
     updateSession(result.session);
     await saveTrackingState(result.itinerary, result.session);
-    router.push(
-      destination === "live" ? `/trip/${result.session.id}` : `/trip/${result.session.id}/guide`
-    );
+    router.push(destination === "live" ? `/trip/${result.session.id}` : `/trip/${result.session.id}/guide`);
   };
 
   const isPublished = itinerary.shareStatus === "published";
@@ -131,74 +121,69 @@ export default function ItineraryDetailPage() {
     <Screen title={itinerary.title[locale]} subtitle={itinerary.summary[locale]} showBack>
       {/* ── 예산·날씨 요약 ── */}
       <SectionCard>
-        <Text style={styles.budgetLabel}>
+        <Text style={[styles.budgetLabel, { color: colors.sand }]}>
           {itinerary.planningMeta
             ? itinerary.planningMeta.budgetSummary.summary[locale]
             : itinerary.estimatedBudgetLabel[locale]}
         </Text>
         {itinerary.planningMeta ? (
           <View style={styles.metaStack}>
-            <View style={styles.metaRow}>
-              <Feather name="dollar-sign" size={13} color={colors.mint} />
-              <Text style={styles.metaCopy}>
-                {locale === "ko"
-                  ? `총 ${formatKrwFull(itinerary.planningMeta.budgetSummary.estimatedTotalKrw, locale)} / 1인 ${formatKrwCompact(itinerary.planningMeta.budgetSummary.estimatedPerPersonKrw, locale)}`
-                  : `Total ${formatKrwFull(itinerary.planningMeta.budgetSummary.estimatedTotalKrw, locale)} / ${formatKrwCompact(itinerary.planningMeta.budgetSummary.estimatedPerPersonKrw, locale)} per person`}
-              </Text>
-            </View>
-            <View style={styles.metaRow}>
-              <Feather name="cloud" size={13} color={colors.mint} />
-              <Text style={styles.metaCopy}>
-                {itinerary.planningMeta.weatherSnapshot.summary[locale]}
-              </Text>
-            </View>
-            <View style={styles.metaRow}>
-              <Feather name="map-pin" size={13} color={colors.mint} />
-              <Text style={styles.metaCopy}>
-                {locale === "ko"
-                  ? `${itinerary.planningMeta.startArea.name.ko} 출발`
-                  : `Starting near ${itinerary.planningMeta.startArea.name.en}`}
-              </Text>
-            </View>
+            {[
+              { icon: "dollar-sign" as const, text: locale === "ko"
+                ? `총 ${formatKrwFull(itinerary.planningMeta.budgetSummary.estimatedTotalKrw, locale)} / 1인 ${formatKrwCompact(itinerary.planningMeta.budgetSummary.estimatedPerPersonKrw, locale)}`
+                : `Total ${formatKrwFull(itinerary.planningMeta.budgetSummary.estimatedTotalKrw, locale)} / ${formatKrwCompact(itinerary.planningMeta.budgetSummary.estimatedPerPersonKrw, locale)} per person` },
+              { icon: "cloud" as const, text: itinerary.planningMeta.weatherSnapshot.summary[locale] },
+              { icon: "map-pin" as const, text: locale === "ko"
+                ? `${itinerary.planningMeta.startArea.name.ko} 출발`
+                : `Starting near ${itinerary.planningMeta.startArea.name.en}` },
+            ].map(({ icon, text }) => (
+              <View key={icon} style={styles.metaRow}>
+                <Feather name={icon} size={13} color={colors.mint} />
+                <Text style={[styles.metaCopy, { color: colors.mist }]}>{text}</Text>
+              </View>
+            ))}
           </View>
         ) : null}
 
-        {/* 메인 액션 */}
         <View style={styles.actionGroup}>
           <Pressable
-            style={styles.primaryBtn}
+            style={[styles.primaryBtn, { backgroundColor: colors.coral }]}
             onPress={() => launchSession({ askPermission: true, destination: "live" })}
           >
             <Feather name="navigation" size={16} color={colors.navy} />
-            <Text style={styles.primaryBtnText}>{t("itinerary.startGuide")}</Text>
+            <Text style={[styles.primaryBtnText, { color: colors.navy }]}>{t("itinerary.startGuide")}</Text>
           </Pressable>
-          <Pressable style={styles.secondaryBtn} onPress={() => publishMutation.mutate()}>
+          <Pressable
+            style={[styles.secondaryBtn, { backgroundColor: colors.glass, borderColor: colors.line }]}
+            onPress={() => publishMutation.mutate()}
+          >
             <Feather name={isPublished ? "check-circle" : "share-2"} size={16} color={colors.cloud} />
-            <Text style={styles.secondaryBtnText}>
+            <Text style={[styles.secondaryBtnText, { color: colors.cloud }]}>
               {isPublished ? t("itinerary.published") : t("itinerary.publish")}
             </Text>
           </Pressable>
         </View>
 
-        {/* 보조 액션 */}
         <View style={styles.inlineGroup}>
           <Pressable
-            style={styles.inlineBtn}
+            style={[styles.inlineBtn, { borderColor: colors.line, backgroundColor: colors.glass }]}
             onPress={() => launchSession({ askPermission: false, destination: "guide" })}
           >
             <Feather name="message-circle" size={13} color={colors.cloud} />
-            <Text style={styles.inlineBtnText}>{t("itinerary.askGuide")}</Text>
+            <Text style={[styles.inlineBtnText, { color: colors.cloud }]}>{t("itinerary.askGuide")}</Text>
           </Pressable>
-          <Pressable style={styles.inlineBtn} onPress={() => ratingMutation.mutate()}>
+          <Pressable
+            style={[styles.inlineBtn, { borderColor: colors.line, backgroundColor: colors.glass }]}
+            onPress={() => ratingMutation.mutate()}
+          >
             <Feather name="star" size={13} color={colors.sand} />
-            <Text style={styles.inlineBtnText}>
+            <Text style={[styles.inlineBtnText, { color: colors.cloud }]}>
               {locale === "ko" ? "5점 남기기" : "Rate 5.0"}
             </Text>
           </Pressable>
         </View>
       </SectionCard>
 
-      {/* ── 계정 업그레이드 ── */}
       {profile?.isAnonymous ? (
         <GuestUpgradeCard
           locale={locale}
@@ -209,7 +194,6 @@ export default function ItineraryDetailPage() {
         />
       ) : null}
 
-      {/* ── 일별 일정 ── */}
       {itinerary.days.map((day) => (
         <SectionCard key={day.dayNumber} title={`Day ${day.dayNumber}`} hint={day.theme[locale]}>
           {day.stops.map((stop) => (
@@ -231,40 +215,37 @@ export default function ItineraryDetailPage() {
         </SectionCard>
       ))}
 
-      {/* ── 가격 디버그 (개발자용) ── */}
       <SectionCard
         title={locale === "ko" ? "가격 디버그" : "Price debug"}
-        hint={
-          locale === "ko"
-            ? "총액 계산과 장소별·이동별 비용을 확인할 수 있어요."
-            : "Inspect total cost, stop spend, and transit fares."
-        }
+        hint={locale === "ko"
+          ? "총액 계산과 장소별·이동별 비용을 확인할 수 있어요."
+          : "Inspect total cost, stop spend, and transit fares."}
       >
-        <Text style={styles.debugSummary}>
+        <Text style={[styles.debugSummary, { color: colors.sand }]}>
           {locale === "ko"
             ? `총 ${formatKrwFull(itinerary.planningMeta.budgetSummary.estimatedTotalKrw, locale)} / 잔여 ${formatKrwFull(itinerary.planningMeta.budgetSummary.remainingBudgetKrw, locale)}`
             : `Total ${formatKrwFull(itinerary.planningMeta.budgetSummary.estimatedTotalKrw, locale)} / Remaining ${formatKrwFull(itinerary.planningMeta.budgetSummary.remainingBudgetKrw, locale)}`}
         </Text>
-        <Text style={styles.debugMeta}>
+        <Text style={[styles.debugMeta, { color: colors.mist }]}>
           {locale === "ko"
             ? `장소 ${formatKrwFull(placeSpendTotalKrw, locale)} / 이동 ${formatKrwFull(transitSpendTotalKrw, locale)} / ${itinerary.preferences.partySize}명`
             : `Place ${formatKrwFull(placeSpendTotalKrw, locale)} / Transit ${formatKrwFull(transitSpendTotalKrw, locale)} / ${itinerary.preferences.partySize} pax`}
         </Text>
         {itinerary.days.map((day) => (
-          <View key={`price-${day.dayNumber}`} style={styles.debugDay}>
-            <Text style={styles.debugDayTitle}>{`Day ${day.dayNumber}`}</Text>
+          <View key={`price-${day.dayNumber}`} style={[styles.debugDay, { borderTopColor: colors.line }]}>
+            <Text style={[styles.debugDayTitle, { color: colors.cloud }]}>{`Day ${day.dayNumber}`}</Text>
             {day.stops.map((stop) => (
               <View key={`price-stop-${stop.id}`} style={styles.debugRow}>
-                <Text style={styles.debugPlaceName}>
+                <Text style={[styles.debugPlaceName, { color: colors.smoke }]}>
                   {stop.order}. {stop.place.name[locale]}
                 </Text>
-                <Text style={styles.debugMeta}>
+                <Text style={[styles.debugMeta, { color: colors.mist }]}>
                   {locale === "ko"
                     ? `장소 ${formatKrwFull(stop.place.estimatedSpendKrw * itinerary.preferences.partySize, locale)} (${formatKrwFull(stop.place.estimatedSpendKrw, locale)} × ${itinerary.preferences.partySize})`
                     : `Place ${formatKrwFull(stop.place.estimatedSpendKrw * itinerary.preferences.partySize, locale)} (${formatKrwFull(stop.place.estimatedSpendKrw, locale)} × ${itinerary.preferences.partySize})`}
                 </Text>
                 {stop.transitFromPrevious ? (
-                  <Text style={styles.debugTransit}>
+                  <Text style={[styles.debugTransit, { color: colors.mint }]}>
                     {locale === "ko"
                       ? `이동 ${formatKrwFull(stop.transitFromPrevious.estimatedFareKrw * itinerary.preferences.partySize, locale)} (${stop.transitFromPrevious.provider})`
                       : `Transit ${formatKrwFull(stop.transitFromPrevious.estimatedFareKrw * itinerary.preferences.partySize, locale)} (${stop.transitFromPrevious.provider})`}
@@ -280,118 +261,33 @@ export default function ItineraryDetailPage() {
 }
 
 const styles = StyleSheet.create({
-  budgetLabel: {
-    color: colors.sand,
-    fontSize: 16,
-    fontWeight: "800",
-    lineHeight: 24,
-  },
-  metaStack: {
-    gap: 7,
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-  metaCopy: {
-    color: "rgba(248,251,253,0.72)",
-    fontSize: 13,
-    lineHeight: 19,
-    flex: 1,
-  },
-  actionGroup: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
+  budgetLabel: { fontSize: 16, fontWeight: "800", lineHeight: 24 },
+  metaStack: { gap: 7 },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  metaCopy: { fontSize: 13, lineHeight: 19, flex: 1 },
+  actionGroup: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs },
   primaryBtn: {
-    flex: 1,
-    backgroundColor: colors.coral,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
+    flex: 1, borderRadius: radii.md, paddingVertical: spacing.md,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
   },
-  primaryBtnText: {
-    color: colors.navy,
-    fontWeight: "800",
-    fontSize: 14,
-  },
+  primaryBtnText: { fontWeight: "800", fontSize: 14 },
   secondaryBtn: {
-    flex: 1,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.line,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
+    flex: 1, borderRadius: radii.md, paddingVertical: spacing.md, borderWidth: 1,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
   },
-  secondaryBtnText: {
-    color: colors.cloud,
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  inlineGroup: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    flexWrap: "wrap",
-  },
+  secondaryBtnText: { fontWeight: "700", fontSize: 14 },
+  inlineGroup: { flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" },
   inlineBtn: {
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: radii.pill, borderWidth: 1,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    flexDirection: "row", alignItems: "center", gap: 6,
   },
-  inlineBtnText: {
-    color: colors.cloud,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  debugSummary: {
-    color: colors.sand,
-    fontSize: 13,
-    fontWeight: "800",
-    lineHeight: 20,
-  },
-  debugDay: {
-    gap: 6,
-    paddingTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.line,
-  },
-  debugDayTitle: {
-    color: colors.cloud,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  debugRow: {
-    gap: 3,
-    paddingBottom: spacing.xs,
-  },
-  debugPlaceName: {
-    color: "rgba(248,251,253,0.80)",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  debugMeta: {
-    color: "rgba(248,251,253,0.58)",
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  debugTransit: {
-    color: colors.mint,
-    fontSize: 11,
-    lineHeight: 16,
-  },
+  inlineBtnText: { fontSize: 13, fontWeight: "600" },
+  debugSummary: { fontSize: 13, fontWeight: "800", lineHeight: 20 },
+  debugDay: { gap: 6, paddingTop: spacing.sm, borderTopWidth: 1 },
+  debugDayTitle: { fontSize: 12, fontWeight: "800" },
+  debugRow: { gap: 3, paddingBottom: spacing.xs },
+  debugPlaceName: { fontSize: 12, fontWeight: "700" },
+  debugMeta: { fontSize: 11, lineHeight: 16 },
+  debugTransit: { fontSize: 11, lineHeight: 16 },
 });

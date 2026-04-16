@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { colors, radii, spacing } from "../../theme/tokens";
+import { radii, spacing } from "../../theme/tokens";
+import { useColors } from "../../theme/use-colors";
 import { Itinerary } from "../../types/domain";
 import { formatKrwCompact } from "../../utils/currency";
 import { tText } from "../../utils/localized";
@@ -14,29 +15,34 @@ export const ItineraryCard = ({
   locale: "ko" | "en";
   onPress: () => void;
 }) => {
+  const colors = useColors();
   const isPublished = itinerary.shareStatus === "published";
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.card,
+        { backgroundColor: colors.surface, borderColor: colors.line },
+        pressed && { opacity: 0.78, backgroundColor: colors.surfaceHigh },
+      ]}
     >
-      {/* 상태 표시 accent bar */}
       <View style={[styles.accentBar, { backgroundColor: isPublished ? colors.mint : colors.lineBright }]} />
 
       <View style={styles.inner}>
-        {/* 상단 메타 행 */}
         <View style={styles.metaRow}>
           <View
             style={[
               styles.badge,
-              isPublished ? styles.badgePublished : styles.badgePrivate,
+              isPublished
+                ? { backgroundColor: colors.mintLight, borderColor: colors.mintBorder }
+                : { backgroundColor: colors.glass, borderColor: colors.line },
             ]}
           >
             <Text
               style={[
                 styles.badgeText,
-                isPublished ? styles.badgeTextPublished : styles.badgeTextPrivate,
+                { color: isPublished ? colors.mint : colors.mist },
               ]}
             >
               {isPublished
@@ -45,39 +51,31 @@ export const ItineraryCard = ({
             </Text>
           </View>
           <View style={styles.ratingRow}>
-            <Text style={styles.star}>★</Text>
-            <Text style={styles.score}>{itinerary.ratingAverage.toFixed(1)}</Text>
+            <Text style={[styles.star, { color: colors.sand }]}>★</Text>
+            <Text style={[styles.score, { color: colors.sand }]}>{itinerary.ratingAverage.toFixed(1)}</Text>
           </View>
         </View>
 
-        {/* 제목 */}
-        <Text style={styles.title}>{tText(itinerary.title, locale)}</Text>
+        <Text style={[styles.title, { color: colors.cloud }]}>{tText(itinerary.title, locale)}</Text>
 
-        {/* 요약 */}
-        <Text style={styles.summary} numberOfLines={2}>
+        <Text style={[styles.summary, { color: colors.mist }]} numberOfLines={2}>
           {tText(itinerary.summary, locale)}
         </Text>
 
-        {/* 날씨·예산 요약 */}
         {itinerary.planningMeta ? (
-          <Text style={styles.meta} numberOfLines={1}>
+          <Text style={[styles.meta, { color: colors.fog }]} numberOfLines={1}>
             {tText(itinerary.planningMeta.weatherSnapshot.summary, locale)}
           </Text>
         ) : null}
 
-        {/* 하단 정보 */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            {itinerary.days.length}
-            {locale === "ko" ? "일" : " days"}
+          <Text style={[styles.footerText, { color: colors.fog }]}>
+            {itinerary.days.length}{locale === "ko" ? "일" : " days"}
           </Text>
-          <Text style={styles.footerDot}>·</Text>
-          <Text style={styles.footerText}>
+          <Text style={[styles.footerDot, { color: colors.fog }]}>·</Text>
+          <Text style={[styles.footerText, { color: colors.fog }]}>
             {itinerary.planningMeta
-              ? formatKrwCompact(
-                  itinerary.planningMeta.budgetSummary.estimatedTotalKrw,
-                  locale
-                )
+              ? formatKrwCompact(itinerary.planningMeta.budgetSummary.estimatedTotalKrw, locale)
               : tText(itinerary.estimatedBudgetLabel, locale)}
           </Text>
         </View>
@@ -88,16 +86,10 @@ export const ItineraryCard = ({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "rgba(255,255,255,0.07)",
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.line,
     flexDirection: "row",
     overflow: "hidden",
-  },
-  pressed: {
-    opacity: 0.78,
-    backgroundColor: "rgba(255,255,255,0.10)",
   },
   accentBar: {
     width: 4,
@@ -118,25 +110,11 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderWidth: 1,
   },
-  badgePublished: {
-    backgroundColor: colors.mintLight,
-    borderColor: colors.mintBorder,
-  },
-  badgePrivate: {
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderColor: colors.line,
-  },
   badgeText: {
     fontSize: 11,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.4,
-  },
-  badgeTextPublished: {
-    color: colors.mint,
-  },
-  badgeTextPrivate: {
-    color: colors.mist,
   },
   ratingRow: {
     flexDirection: "row",
@@ -144,27 +122,22 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   star: {
-    color: colors.sand,
     fontSize: 12,
   },
   score: {
-    color: colors.sand,
     fontSize: 13,
     fontWeight: "700",
   },
   title: {
-    color: colors.cloud,
     fontSize: 17,
     fontWeight: "800",
     letterSpacing: -0.3,
   },
   summary: {
-    color: colors.mist,
     fontSize: 13,
     lineHeight: 19,
   },
   meta: {
-    color: colors.fog,
     fontSize: 12,
     lineHeight: 18,
   },
@@ -175,12 +148,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   footerText: {
-    color: colors.fog,
     fontSize: 12,
     fontWeight: "600",
   },
   footerDot: {
-    color: colors.fog,
     fontSize: 12,
   },
 });

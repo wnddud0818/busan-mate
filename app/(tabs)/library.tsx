@@ -7,9 +7,11 @@ import { Screen } from "../../src/components/common/screen";
 import { SectionCard } from "../../src/components/common/section-card";
 import { ItineraryCard } from "../../src/components/itinerary/itinerary-card";
 import { useAppStore } from "../../src/stores/app-store";
-import { colors, spacing } from "../../src/theme/tokens";
+import { spacing } from "../../src/theme/tokens";
+import { useColors } from "../../src/theme/use-colors";
 
 export default function LibraryTab() {
+  const colors = useColors();
   const locale = useAppStore((state) => state.locale);
   const itineraries = useAppStore((state) => state.itineraries);
   const activeSession = useAppStore((state) => state.activeSession);
@@ -17,12 +19,8 @@ export default function LibraryTab() {
 
   return (
     <Screen title={t("library.title")} subtitle={t("library.subtitle")}>
-      {/* 활성 세션 배너 */}
       {activeSession ? (
-        <SectionCard
-          variant="highlight"
-          title={locale === "ko" ? "진행 중인 여행" : "Active trip session"}
-        >
+        <SectionCard variant="highlight" title={locale === "ko" ? "진행 중인 여행" : "Active trip session"}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <Feather name="navigation" size={14} color={colors.mint} />
             <Text style={{ color: colors.cloud, fontSize: 14, flex: 1, lineHeight: 20 }}>
@@ -34,25 +32,11 @@ export default function LibraryTab() {
         </SectionCard>
       ) : null}
 
-      {/* 빈 상태 */}
       {itineraries.length === 0 ? (
         <SectionCard>
-          <View
-            style={{
-              alignItems: "center",
-              paddingVertical: spacing.xl,
-              gap: spacing.md,
-            }}
-          >
-            <Feather name="map" size={44} color="rgba(248,251,253,0.18)" />
-            <Text
-              style={{
-                color: colors.mist,
-                textAlign: "center",
-                lineHeight: 22,
-                fontSize: 14,
-              }}
-            >
+          <View style={{ alignItems: "center", paddingVertical: spacing.xl, gap: spacing.md }}>
+            <Feather name="map" size={44} color={colors.lineBright} />
+            <Text style={{ color: colors.mist, textAlign: "center", lineHeight: 22, fontSize: 14 }}>
               {t("library.empty")}
             </Text>
           </View>

@@ -27,6 +27,7 @@ type TrackingStatePayload = {
 interface AppState {
   hydrated: boolean;
   locale: AppLocale;
+  colorScheme: "light" | "dark";
   onboardingComplete: boolean;
   userProfile?: UserProfile;
   itineraries: Itinerary[];
@@ -41,6 +42,7 @@ interface AppState {
   actions: {
     markHydrated: () => void;
     setLocale: (locale: AppLocale) => void;
+    setColorScheme: (scheme: "light" | "dark") => void;
     completeOnboarding: () => void;
     setUserProfile: (profile: UserProfile) => void;
     upsertItinerary: (itinerary: Itinerary) => void;
@@ -64,7 +66,7 @@ interface AppState {
 }
 
 const persistStorage = createJSONStorage(() => AsyncStorage);
-const MAX_DEBUG_LOGS = 60;
+const MAX_DEBUG_LOGS = 120;
 
 const upsertFront = <T extends { id: string }>(items: T[], item: T) => [
   item,
@@ -165,6 +167,7 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       hydrated: false,
       locale: "ko",
+      colorScheme: "light" as const,
       onboardingComplete: false,
       itineraries: [],
       sharedItineraries: seedSharedRoutes,
@@ -177,6 +180,7 @@ export const useAppStore = create<AppState>()(
       actions: {
         markHydrated: () => set({ hydrated: true }),
         setLocale: (locale) => set({ locale }),
+        setColorScheme: (colorScheme) => set({ colorScheme }),
         completeOnboarding: () => set({ onboardingComplete: true }),
         setUserProfile: (profile) => set({ userProfile: profile }),
         upsertItinerary: (itinerary) =>
@@ -332,6 +336,7 @@ export const useAppStore = create<AppState>()(
       storage: persistStorage,
       partialize: (state) => ({
         locale: state.locale,
+        colorScheme: state.colorScheme,
         onboardingComplete: state.onboardingComplete,
         userProfile: state.userProfile,
         itineraries: state.itineraries,

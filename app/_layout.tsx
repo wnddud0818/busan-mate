@@ -9,17 +9,21 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useBootstrap } from "../src/hooks/use-bootstrap";
 import { queryClient } from "../src/lib/query-client";
-import { colors } from "../src/theme/tokens";
+import { useColors, useGradient } from "../src/theme/use-colors";
 
 export default function RootLayout() {
   const ready = useBootstrap();
+  const colors = useColors();
+  const colorScheme = require("../src/stores/app-store").useAppStore(
+    (state: { colorScheme: "light" | "dark" }) => state.colorScheme
+  );
 
   if (!ready) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.navy, justifyContent: "center", alignItems: "center" }}>
-        <StatusBar style="light" />
+      <View style={{ flex: 1, backgroundColor: colors.ink, justifyContent: "center", alignItems: "center" }}>
+        <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
         <Text style={{ color: colors.cloud, fontSize: 18, fontWeight: "700" }}>Busan Mate</Text>
-        <Text style={{ color: "rgba(248,251,253,0.7)", marginTop: 8 }}>Loading your trip desk...</Text>
+        <Text style={{ color: colors.mist, marginTop: 8 }}>Loading your trip desk...</Text>
       </View>
     );
   }
@@ -27,16 +31,17 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
-        <StatusBar style="light" />
+        <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
         <Stack
           screenOptions={{
             headerShown: false,
-            contentStyle: { backgroundColor: colors.navy },
+            contentStyle: { backgroundColor: colors.ink },
           }}
         >
           <Stack.Screen name="index" />
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="settings" />
           <Stack.Screen name="itinerary/[id]" />
           <Stack.Screen name="trip/[sessionId]" />
           <Stack.Screen name="trip/[sessionId]/guide" />
