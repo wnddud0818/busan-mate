@@ -23,6 +23,7 @@ import { radii, spacing } from "../../src/theme/tokens";
 import { useColors } from "../../src/theme/use-colors";
 import { AppLocale, PlannerCandidateDebug } from "../../src/types/domain";
 import { formatKrwCompact, formatKrwFull } from "../../src/utils/currency";
+import { buildNavigationLinks } from "../../src/utils/maps";
 
 const engineLabel = (engine: string, locale: AppLocale) => {
   switch (engine) {
@@ -629,22 +630,22 @@ export default function ItineraryDetailPage() {
 
       {itinerary.days.map((day) => (
         <SectionCard key={day.dayNumber} title={`Day ${day.dayNumber}`} hint={day.theme[locale]}>
-          {day.stops.map((stop) => (
-            <StopCard
-              key={stop.id}
-              stop={stop}
-              locale={locale}
-              onDirections={() =>
-                openNavigationLink(
-                  stop.transitFromPrevious?.navigationLinks.naverMap ??
-                    `https://maps.google.com/?q=${stop.place.coordinates.latitude},${stop.place.coordinates.longitude}`
-                )
-              }
-              onBooking={() =>
-                stop.place.bookingUrl ? openNavigationLink(stop.place.bookingUrl) : undefined
-              }
-            />
-          ))}
+          {day.stops.map((stop) => {
+            const navigationLinks = buildNavigationLinks(stop.place.coordinates);
+
+            return (
+              <StopCard
+                key={stop.id}
+                stop={stop}
+                locale={locale}
+                onOpenGoogleMaps={() => openNavigationLink(navigationLinks.googleMaps)}
+                onOpenNaverMap={() => openNavigationLink(navigationLinks.naverMap)}
+                onBooking={() =>
+                  stop.place.bookingUrl ? openNavigationLink(stop.place.bookingUrl) : undefined
+                }
+              />
+            );
+          })}
         </SectionCard>
       ))}
     </Screen>

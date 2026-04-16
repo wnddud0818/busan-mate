@@ -18,6 +18,7 @@ import { ingestLocationEvent, syncLiveSession } from "../../src/services/session
 import { useAppStore } from "../../src/stores/app-store";
 import { radii, spacing } from "../../src/theme/tokens";
 import { useColors } from "../../src/theme/use-colors";
+import { buildNavigationLinks } from "../../src/utils/maps";
 
 export default function LiveGuidePage() {
   const params = useLocalSearchParams<{ sessionId: string }>();
@@ -145,6 +146,36 @@ export default function LiveGuidePage() {
     router.push(`/itinerary/${fallback.id}`);
   };
 
+  const currentStopNavigationLinks = buildNavigationLinks(currentStop.place.coordinates);
+  const mapActions: Array<{
+    key: string;
+    icon: "map-pin" | "navigation" | "external-link";
+    label: string;
+    onPress: () => void;
+  }> = [
+    {
+      key: "google-maps",
+      icon: "map-pin" as const,
+      label: "Google Maps",
+      onPress: () => openNavigationLink(currentStopNavigationLinks.googleMaps),
+    },
+    {
+      key: "naver-map",
+      icon: "navigation" as const,
+      label: "Naver Map",
+      onPress: () => openNavigationLink(currentStopNavigationLinks.naverMap),
+    },
+  ];
+
+  if (currentStop.place.bookingUrl) {
+    mapActions.push({
+      key: "booking",
+      icon: "external-link" as const,
+      label: "Booking",
+      onPress: () => openNavigationLink(currentStop.place.bookingUrl!),
+    });
+  }
+
   return (
     <Screen title={locale === "ko" ? "실시간 가이드" : "Live guide"} subtitle={itinerary.title[locale]} showBack>
       <SectionCard variant="highlight" title={currentStop.place.name[locale]}>
@@ -189,6 +220,19 @@ export default function LiveGuidePage() {
           ].map(({ icon, label, onPress }) => (
             <Pressable
               key={icon}
+              style={[styles.gridBtn, { borderColor: colors.line, backgroundColor: colors.glass }]}
+              onPress={onPress}
+            >
+              <Feather name={icon} size={16} color={colors.cloud} />
+              <Text style={[styles.gridBtnText, { color: colors.cloud }]}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={styles.actionGrid}>
+          {mapActions.map(({ key, icon, label, onPress }) => (
+            <Pressable
+              key={key}
               style={[styles.gridBtn, { borderColor: colors.line, backgroundColor: colors.glass }]}
               onPress={onPress}
             >

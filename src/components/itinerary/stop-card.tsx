@@ -10,12 +10,14 @@ import { clockLabel } from "../../utils/time";
 export const StopCard = ({
   stop,
   locale,
-  onDirections,
+  onOpenGoogleMaps,
+  onOpenNaverMap,
   onBooking,
 }: {
   stop: ItineraryStop;
   locale: "ko" | "en";
-  onDirections: () => void;
+  onOpenGoogleMaps: () => void;
+  onOpenNaverMap: () => void;
   onBooking?: () => void;
 }) => {
   const colors = useColors();
@@ -32,7 +34,7 @@ export const StopCard = ({
         <View style={styles.timeRow}>
           <Feather name="clock" size={11} color={colors.mint} />
           <Text style={[styles.time, { color: colors.mint }]}>
-            {clockLabel(stop.startTime)} – {clockLabel(stop.endTime)}
+            {clockLabel(stop.startTime)} - {clockLabel(stop.endTime)}
           </Text>
         </View>
 
@@ -47,16 +49,25 @@ export const StopCard = ({
         {stop.transitFromPrevious ? (
           <View style={styles.transitRow}>
             <Feather name="navigation" size={11} color={colors.coral} />
-            <Text style={[styles.transit, { color: colors.coral }]}>{tText(stop.transitFromPrevious.summary, locale)}</Text>
+            <Text style={[styles.transit, { color: colors.coral }]}>
+              {tText(stop.transitFromPrevious.summary, locale)}
+            </Text>
           </View>
         ) : null}
 
         {stop.note ? <Text style={[styles.note, { color: colors.mist }]}>{tText(stop.note, locale)}</Text> : null}
 
         <View style={styles.actions}>
-          <Pressable onPress={onDirections} style={[styles.primaryAction, { backgroundColor: colors.coral }]}>
+          <Pressable onPress={onOpenGoogleMaps} style={[styles.primaryAction, { backgroundColor: colors.coral }]}>
             <Feather name="map-pin" size={12} color={colors.navy} />
-            <Text style={[styles.primaryActionText, { color: colors.navy }]}>{locale === "ko" ? "길안내" : "Directions"}</Text>
+            <Text style={[styles.primaryActionText, { color: colors.navy }]}>Google Maps</Text>
+          </Pressable>
+          <Pressable
+            onPress={onOpenNaverMap}
+            style={[styles.secondaryAction, { backgroundColor: colors.glass, borderColor: colors.line }]}
+          >
+            <Feather name="navigation" size={12} color={colors.cloud} />
+            <Text style={[styles.secondaryActionText, { color: colors.cloud }]}>Naver Map</Text>
           </Pressable>
           {stop.place.bookingUrl ? (
             <Pressable
@@ -64,7 +75,9 @@ export const StopCard = ({
               style={[styles.secondaryAction, { backgroundColor: colors.glass, borderColor: colors.line }]}
             >
               <Feather name="external-link" size={12} color={colors.cloud} />
-              <Text style={[styles.secondaryActionText, { color: colors.cloud }]}>{locale === "ko" ? "예약" : "Booking"}</Text>
+              <Text style={[styles.secondaryActionText, { color: colors.cloud }]}>
+                {locale === "ko" ? "예약" : "Booking"}
+              </Text>
             </Pressable>
           ) : null}
         </View>
@@ -141,6 +154,7 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.sm,
     marginTop: 2,
   },
