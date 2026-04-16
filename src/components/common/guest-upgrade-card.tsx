@@ -37,6 +37,7 @@ export const GuestUpgradeCard = ({
           : "Receive a magic link by email to publish routes and leave ratings."}
       </Text>
       <TextInput
+        nativeID="guest-upgrade-email-input"
         value={email}
         onChangeText={setEmail}
         placeholder={locale === "ko" ? "이메일 주소" : "Email address"}

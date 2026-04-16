@@ -60,7 +60,9 @@ export const evaluateTrackingUpdate = ({
 }) => {
   const day = itinerary.days[session.currentDay - 1];
   const currentStop = day?.stops[session.currentStopOrder - 1];
-  const nextStop = day?.stops[session.currentStopOrder];
+  const nextStop =
+    day?.stops[session.currentStopOrder] ??
+    itinerary.days[session.currentDay]?.stops[0];
 
   if (!currentStop) {
     return { shouldNotify: false, deviated: false };

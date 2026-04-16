@@ -2,6 +2,7 @@ import { hasSupabaseConfig } from "../config/env";
 import { buildSharedSnapshot } from "../features/ranking/scoring";
 import { supabase } from "../lib/supabase";
 import { Itinerary, SharedItinerary, SyncStatus, UserProfile } from "../types/domain";
+import { logApiError, logApiRequest, logApiResponse, logDebugInfo } from "./debug-service";
 
 type SyncItineraryRecordResult = {
   itinerary: Itinerary;
@@ -75,6 +76,14 @@ export const syncItineraryRecord = async ({
   });
 
   if (!hasRemoteProfile(userProfile)) {
+    logDebugInfo({
+      label: "publish-itinerary",
+      summary: "Skipping remote publish because there is no remote profile.",
+      payload: {
+        itineraryId: itinerary.id,
+        shareStatus,
+      },
+    });
     return {
       itinerary: nextItinerary,
       shared: shareStatus === "published" ? toLocalSharedSnapshot(nextItinerary, nextItinerary.syncStatus) : undefined,
@@ -82,6 +91,15 @@ export const syncItineraryRecord = async ({
     };
   }
 
+  const traceId = logApiRequest({
+    label: "publish-itinerary",
+    summary: "Syncing itinerary to Supabase.",
+    payload: {
+      itinerary,
+      shareStatus,
+      profileId: userProfile!.profileId,
+    },
+  });
   const { data, error } = await supabase!.functions.invoke("publish-itinerary", {
     body: {
       itinerary,
@@ -91,6 +109,16 @@ export const syncItineraryRecord = async ({
   });
 
   if (error || !data?.itinerary) {
+    logApiError({
+      label: "publish-itinerary",
+      traceId,
+      summary: "Supabase publish failed. Keeping a pending local snapshot.",
+      error: error ?? new Error("Missing itinerary in publish response."),
+      payload: {
+        itineraryId: itinerary.id,
+        shareStatus,
+      },
+    });
     return {
       itinerary: withItinerarySync(itinerary, {
         shareStatus,
@@ -105,6 +133,15 @@ export const syncItineraryRecord = async ({
     remoteId: data.itinerary.remoteId ?? data.itinerary.id,
     shareStatus: data.itinerary.shareStatus ?? shareStatus,
     syncStatus: "synced",
+  });
+  logApiResponse({
+    label: "publish-itinerary",
+    traceId,
+    summary: "Supabase publish succeeded.",
+    payload: {
+      itinerary: data.itinerary,
+      shared: data.shared,
+    },
   });
 
   return {

@@ -97,6 +97,26 @@ export default function ItineraryDetailPage() {
     );
   }
 
+  const placeSpendTotalKrw = itinerary.days.reduce(
+    (total, day) =>
+      total +
+      day.stops.reduce(
+        (dayTotal, stop) => dayTotal + stop.place.estimatedSpendKrw * itinerary.preferences.partySize,
+        0
+      ),
+    0
+  );
+  const transitSpendTotalKrw = itinerary.days.reduce(
+    (total, day) =>
+      total +
+      day.stops.reduce(
+        (dayTotal, stop) =>
+          dayTotal + (stop.transitFromPrevious?.estimatedFareKrw ?? 0) * itinerary.preferences.partySize,
+        0
+      ),
+    0
+  );
+
   const launchSession = async ({
     askPermission,
     destination,
@@ -178,6 +198,75 @@ export default function ItineraryDetailPage() {
             <Text style={styles.inlineButtonText}>{locale === "ko" ? "5점 남기기" : "Rate 5.0"}</Text>
           </Pressable>
         </View>
+      </SectionCard>
+
+      <SectionCard
+        title={locale === "ko" ? "가격 디버그" : "Price debug"}
+        hint={
+          locale === "ko"
+            ? "총액 계산과 장소별/이동별 비용을 바로 확인할 수 있어요."
+            : "Inspect the total price calculation, stop spend, and transit fares."
+        }
+      >
+        <Text style={styles.debugSummary}>
+          {locale === "ko"
+            ? `총 예상 ${formatKrwFull(itinerary.planningMeta.budgetSummary.estimatedTotalKrw, locale)} / 남은 예산 ${formatKrwFull(
+                itinerary.planningMeta.budgetSummary.remainingBudgetKrw,
+                locale
+              )}`
+            : `Estimated total ${formatKrwFull(
+                itinerary.planningMeta.budgetSummary.estimatedTotalKrw,
+                locale
+              )} / Remaining ${formatKrwFull(itinerary.planningMeta.budgetSummary.remainingBudgetKrw, locale)}`}
+        </Text>
+        <Text style={styles.debugMeta}>
+          {locale === "ko"
+            ? `장소 비용 합계 ${formatKrwFull(placeSpendTotalKrw, locale)} / 이동 비용 합계 ${formatKrwFull(
+                transitSpendTotalKrw,
+                locale
+              )} / 인원 ${itinerary.preferences.partySize}명`
+            : `Place spend ${formatKrwFull(placeSpendTotalKrw, locale)} / Transit ${formatKrwFull(
+                transitSpendTotalKrw,
+                locale
+              )} / Party size ${itinerary.preferences.partySize}`}
+        </Text>
+
+        {itinerary.days.map((day) => (
+          <View key={`price-${day.dayNumber}`} style={styles.debugDay}>
+            <Text style={styles.debugDayTitle}>{`Day ${day.dayNumber}`}</Text>
+            {day.stops.map((stop) => (
+              <View key={`price-stop-${stop.id}`} style={styles.debugRow}>
+                <Text style={styles.debugPlaceName}>
+                  {stop.order}. {stop.place.name[locale]}
+                </Text>
+                <Text style={styles.debugMeta}>
+                  {locale === "ko"
+                    ? `장소 ${formatKrwFull(
+                        stop.place.estimatedSpendKrw * itinerary.preferences.partySize,
+                        locale
+                      )} (${formatKrwFull(stop.place.estimatedSpendKrw, locale)} x ${itinerary.preferences.partySize})`
+                    : `Place ${formatKrwFull(
+                        stop.place.estimatedSpendKrw * itinerary.preferences.partySize,
+                        locale
+                      )} (${formatKrwFull(stop.place.estimatedSpendKrw, locale)} x ${itinerary.preferences.partySize})`}
+                </Text>
+                {stop.transitFromPrevious ? (
+                  <Text style={styles.debugTransit}>
+                    {locale === "ko"
+                      ? `이동 ${formatKrwFull(
+                          stop.transitFromPrevious.estimatedFareKrw * itinerary.preferences.partySize,
+                          locale
+                        )} (${stop.transitFromPrevious.provider})`
+                      : `Transit ${formatKrwFull(
+                          stop.transitFromPrevious.estimatedFareKrw * itinerary.preferences.partySize,
+                          locale
+                        )} (${stop.transitFromPrevious.provider})`}
+                  </Text>
+                ) : null}
+              </View>
+            ))}
+          </View>
+        ))}
       </SectionCard>
 
       {profile?.isAnonymous ? (
@@ -267,5 +356,41 @@ const styles = StyleSheet.create({
   inlineButtonText: {
     color: colors.cloud,
     fontWeight: "700",
+  },
+  debugSummary: {
+    color: colors.sand,
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 22,
+  },
+  debugDay: {
+    gap: 6,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+  },
+  debugDayTitle: {
+    color: colors.cloud,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  debugRow: {
+    gap: 4,
+    paddingBottom: spacing.xs,
+  },
+  debugPlaceName: {
+    color: colors.cloud,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  debugMeta: {
+    color: "rgba(248,251,253,0.72)",
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  debugTransit: {
+    color: colors.mint,
+    fontSize: 12,
+    lineHeight: 18,
   },
 });

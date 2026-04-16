@@ -3,6 +3,7 @@ import { ReactNode } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { DebugPanel } from "./debug-panel";
 import { colors, spacing } from "../../theme/tokens";
 
 interface ScreenProps {
@@ -19,6 +20,7 @@ export const Screen = ({ title, subtitle, children, scroll = true }: ScreenProps
         <Text style={styles.title}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       </View>
+      <DebugPanel />
       {children}
     </View>
   );

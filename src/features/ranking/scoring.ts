@@ -4,13 +4,17 @@ import {
   LocationEvent,
   RankingSnapshot,
   SharedItinerary,
-  SharedItinerary as SharedRoute,
 } from "../../types/domain";
 
-const liveTravelerCount = (itineraryId: string, locationEvents: LocationEvent[]) =>
-  locationEvents.filter(
-    (event) => event.syncStatus === "synced" && event.tripSessionId.includes(itineraryId.slice(0, 6))
-  ).length;
+const liveTravelerCount = (itineraryId: string, locationEvents: LocationEvent[]) => {
+  const sessionPrefix = `trip-${itineraryId.slice(0, 6)}-`;
+  const uniqueSessions = new Set(
+    locationEvents
+      .filter((event) => event.syncStatus === "synced" && event.tripSessionId.startsWith(sessionPrefix))
+      .map((event) => event.tripSessionId)
+  );
+  return uniqueSessions.size;
+};
 
 export const computeRankingScore = ({
   ratingAverage,
@@ -56,7 +60,7 @@ export const materializeRanking = (
     .sort((left, right) => right.score - left.score);
 };
 
-export const buildSharedSnapshot = (itinerary: Itinerary): SharedRoute => {
+export const buildSharedSnapshot = (itinerary: Itinerary): SharedItinerary => {
   const firstStop = itinerary.days[0]?.stops[0];
 
   return {

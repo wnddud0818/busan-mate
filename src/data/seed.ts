@@ -1,9 +1,6 @@
-import { formatISO } from "date-fns";
-
 import { estimatedSpendFromPriceLevel } from "../features/itinerary/planning";
 import {
   BookingLink,
-  Itinerary,
   LocalizedText,
   Place,
   RankingSnapshot,
@@ -293,8 +290,3 @@ export const seedRanking: RankingSnapshot[] = [
     currentTravelers: 12,
   },
 ];
-
-export const seedItineraryTemplate = (itinerary: Itinerary) => ({
-  ...itinerary,
-  createdAt: formatISO(new Date()),
-});

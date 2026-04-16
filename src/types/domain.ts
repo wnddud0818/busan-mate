@@ -21,6 +21,8 @@ export interface LocalizedText {
 }
 
 export type SyncStatus = "synced" | "pending" | "failed";
+export type DebugLogKind = "api" | "price";
+export type DebugLogStage = "request" | "response" | "error" | "info";
 
 export interface Coordinates {
   latitude: number;
@@ -237,6 +239,17 @@ export interface GuideContext {
   itinerary: Itinerary;
   stop: ItineraryStop;
   locale: AppLocale;
+}
+
+export interface DebugLogEntry {
+  id: string;
+  traceId?: string;
+  kind: DebugLogKind;
+  stage: DebugLogStage;
+  label: string;
+  createdAt: string;
+  summary?: string;
+  payload?: unknown;
 }
 
 export interface BookingLink {

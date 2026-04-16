@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(hexdump -C /c/obsidian/busan-mate/app/trip/[sessionId].tsx)",
+      "Bash(python3 *)",
+      "Bash(node *)",
+      "Bash(pnpm test *)"
+    ]
+  }
+}

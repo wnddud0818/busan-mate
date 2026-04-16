@@ -1,12 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+
+const { createJSONStorage, persist } = require("zustand/middleware") as typeof import("zustand/middleware");
 
 import { seedRanking, seedSharedRoutes } from "../data/seed";
 import { buildSharedSnapshot, computeRankingScore, materializeRanking } from "../features/ranking/scoring";
 import {
   AppLocale,
   ChatMessage,
+  DebugLogEntry,
   Itinerary,
   LocationEvent,
   RankingSnapshot,
@@ -35,6 +37,7 @@ interface AppState {
   locationEvents: LocationEvent[];
   chatMessages: ChatMessage[];
   notices: string[];
+  debugLogs: DebugLogEntry[];
   actions: {
     markHydrated: () => void;
     setLocale: (locale: AppLocale) => void;
@@ -44,6 +47,8 @@ interface AppState {
     upsertSharedItinerary: (shared: SharedItinerary) => void;
     setRankings: (rankings: RankingSnapshot[]) => void;
     setNotices: (notices: string[]) => void;
+    addDebugLog: (entry: DebugLogEntry) => void;
+    clearDebugLogs: () => void;
     startSession: (itinerary: Itinerary) => TripSession;
     updateSession: (session: TripSession) => void;
     advanceSession: () => TripSession | undefined;
@@ -59,6 +64,7 @@ interface AppState {
 }
 
 const persistStorage = createJSONStorage(() => AsyncStorage);
+const MAX_DEBUG_LOGS = 60;
 
 const upsertFront = <T extends { id: string }>(items: T[], item: T) => [
   item,
@@ -167,6 +173,7 @@ export const useAppStore = create<AppState>()(
       locationEvents: [],
       chatMessages: [],
       notices: [],
+      debugLogs: [],
       actions: {
         markHydrated: () => set({ hydrated: true }),
         setLocale: (locale) => set({ locale }),
@@ -194,6 +201,11 @@ export const useAppStore = create<AppState>()(
           }),
         setRankings: (rankings) => set({ rankings }),
         setNotices: (notices) => set({ notices }),
+        addDebugLog: (entry) =>
+          set((state) => ({
+            debugLogs: [entry, ...state.debugLogs].slice(0, MAX_DEBUG_LOGS),
+          })),
+        clearDebugLogs: () => set({ debugLogs: [] }),
         startSession: (itinerary) => {
           const session = createSessionDraft(itinerary, get().locationConsent);
           set({ activeSession: session });

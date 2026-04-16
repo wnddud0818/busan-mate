@@ -3,6 +3,7 @@ import { buildGuideAnswer } from "../features/guide/answerer";
 import { supabase } from "../lib/supabase";
 import { GuideAnswerResult, GuideContext, TripSession, UserProfile } from "../types/domain";
 import { createId } from "../utils/id";
+import { logApiError, logApiRequest, logApiResponse, logDebugInfo } from "./debug-service";
 import { hasRemoteProfile } from "./remote-sync";
 
 export const answerGuideQuestion = async ({
@@ -19,6 +20,17 @@ export const answerGuideQuestion = async ({
   userMessageId: string;
 }): Promise<GuideAnswerResult> => {
   if (hasRemoteProfile(userProfile) && session.remoteId && supabase) {
+    const traceId = logApiRequest({
+      label: "answer-guide",
+      summary: "Sending guide question to Supabase Edge Function.",
+      payload: {
+        question,
+        context,
+        session,
+        profileId: userProfile!.profileId,
+        userMessageId,
+      },
+    });
     const { data, error } = await supabase.functions.invoke("answer-guide", {
       body: {
         question,
@@ -30,6 +42,12 @@ export const answerGuideQuestion = async ({
     });
 
     if (!error && data?.answer) {
+      logApiResponse({
+        label: "answer-guide",
+        traceId,
+        summary: "Guide answer returned from Supabase.",
+        payload: data,
+      });
       return {
         answer: data.answer,
         suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
@@ -41,7 +59,32 @@ export const answerGuideQuestion = async ({
         syncStatus: "synced",
       };
     }
+
+    if (error) {
+      logApiError({
+        label: "answer-guide",
+        traceId,
+        summary: "Guide answer request failed. Falling back to the local answerer.",
+        error,
+        payload: {
+          question,
+          sessionId: session.id,
+          userMessageId,
+        },
+      });
+    }
   }
+
+  logDebugInfo({
+    label: "answer-guide",
+    summary: "Using the local guide answerer.",
+    payload: {
+      question,
+      sessionId: session.id,
+      hasRemoteProfile: hasRemoteProfile(userProfile),
+      hasRemoteSession: Boolean(session.remoteId),
+    },
+  });
 
   return {
     ...buildGuideAnswer(question, context),

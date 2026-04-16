@@ -9,6 +9,7 @@ import {
   TripSession,
   UserProfile,
 } from "../types/domain";
+import { logApiError, logApiRequest, logApiResponse, logDebugInfo } from "./debug-service";
 import { hasRemoteProfile, syncItineraryRecord } from "./remote-sync";
 
 const localSyncStatus = (): SyncStatus => (hasSupabaseConfig ? "pending" : "synced");
@@ -52,6 +53,15 @@ const upsertRemoteSession = async ({
   itineraryRemoteId: string;
   userProfile: UserProfile;
 }) => {
+  const traceId = logApiRequest({
+    label: "trip_sessions.upsert",
+    summary: "Upserting live trip session in Supabase.",
+    payload: {
+      session,
+      itineraryRemoteId,
+      profileId: userProfile.profileId,
+    },
+  });
   const { data, error } = await supabase!
     .from("trip_sessions")
     .upsert(
@@ -77,8 +87,25 @@ const upsertRemoteSession = async ({
     .single();
 
   if (error || !data?.id) {
+    logApiError({
+      label: "trip_sessions.upsert",
+      traceId,
+      summary: "Trip session upsert failed.",
+      error: error ?? new Error("Missing session id after upsert."),
+      payload: {
+        sessionId: session.id,
+        itineraryRemoteId,
+      },
+    });
     throw error ?? new Error("Unable to sync the live trip session.");
   }
+
+  logApiResponse({
+    label: "trip_sessions.upsert",
+    traceId,
+    summary: "Trip session synced successfully.",
+    payload: data,
+  });
 
   return data;
 };
@@ -99,6 +126,14 @@ export const syncLiveSession = async ({
   });
 
   if (!hasRemoteProfile(userProfile) || !itineraryResult.itinerary.remoteId) {
+    logDebugInfo({
+      label: "sync-live-session",
+      summary: "Keeping the live session local because remote sync is unavailable.",
+      payload: {
+        itineraryId: itinerary.id,
+        sessionId: session.id,
+      },
+    });
     return {
       itinerary: {
         ...itineraryResult.itinerary,
@@ -117,6 +152,14 @@ export const syncLiveSession = async ({
       itineraryRemoteId: itineraryResult.itinerary.remoteId,
       userProfile: userProfile!,
     });
+    logApiResponse({
+      label: "sync-live-session",
+      summary: "Live session synced to Supabase.",
+      payload: {
+        itineraryId: itineraryResult.itinerary.remoteId,
+        sessionId: data.id,
+      },
+    });
 
     return {
       itinerary: itineraryResult.itinerary,
@@ -126,7 +169,16 @@ export const syncLiveSession = async ({
       }),
       syncStatus: "synced",
     };
-  } catch {
+  } catch (error) {
+    logApiError({
+      label: "sync-live-session",
+      summary: "Live session sync failed. Keeping pending local state.",
+      error,
+      payload: {
+        itineraryId: itinerary.id,
+        sessionId: session.id,
+      },
+    });
     return {
       itinerary: {
         ...itineraryResult.itinerary,
@@ -158,6 +210,14 @@ export const ingestLocationEvent = async ({
   });
 
   if (!hasRemoteProfile(userProfile) || !sessionResult.session.remoteId) {
+    logDebugInfo({
+      label: "ingest-location-event",
+      summary: "Keeping location event local because remote sync is unavailable.",
+      payload: {
+        eventId: event.id,
+        sessionId: session.id,
+      },
+    });
     return {
       event: withEventSync(event, {
         syncStatus: localSyncStatus(),
@@ -167,6 +227,15 @@ export const ingestLocationEvent = async ({
     };
   }
 
+  const traceId = logApiRequest({
+    label: "ingest-location-event",
+    summary: "Sending location event to Supabase.",
+    payload: {
+      event,
+      session: sessionResult.session,
+      profileId: userProfile!.profileId,
+    },
+  });
   const { data, error } = await supabase!.functions.invoke("ingest-location-event", {
     body: {
       event,
@@ -176,6 +245,16 @@ export const ingestLocationEvent = async ({
   });
 
   if (error || !data?.event?.id) {
+    logApiError({
+      label: "ingest-location-event",
+      traceId,
+      summary: "Location ingest failed. Keeping a pending local event.",
+      error: error ?? new Error("Missing event id in ingest response."),
+      payload: {
+        eventId: event.id,
+        sessionId: session.id,
+      },
+    });
     return {
       event: withEventSync(event, {
         syncStatus: "pending",
@@ -186,6 +265,13 @@ export const ingestLocationEvent = async ({
       syncStatus: "pending",
     };
   }
+
+  logApiResponse({
+    label: "ingest-location-event",
+    traceId,
+    summary: "Location event synced successfully.",
+    payload: data,
+  });
 
   return {
     event: withEventSync(event, {

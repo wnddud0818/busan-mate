@@ -1,6 +1,7 @@
 import { hasSupabaseConfig } from "../config/env";
 import { RateItineraryResult, Itinerary, UserProfile } from "../types/domain";
 import { supabase } from "../lib/supabase";
+import { logApiError, logApiRequest, logApiResponse, logDebugInfo } from "./debug-service";
 import { hasRemoteProfile, toLocalSharedSnapshot } from "./remote-sync";
 
 const applyLocalRating = (itinerary: Itinerary, rating: number, syncStatus: "synced" | "pending") => {
@@ -24,6 +25,14 @@ export const rateItinerary = async ({
   const localSyncStatus = hasSupabaseConfig ? "pending" : "synced";
 
   if (!hasRemoteProfile(userProfile)) {
+    logDebugInfo({
+      label: "rate-itinerary",
+      summary: "Applying itinerary rating locally because there is no remote profile.",
+      payload: {
+        itineraryId: itinerary.id,
+        rating,
+      },
+    });
     const nextItinerary = applyLocalRating(itinerary, rating, localSyncStatus);
     return {
       itinerary: nextItinerary,
@@ -32,6 +41,15 @@ export const rateItinerary = async ({
     };
   }
 
+  const traceId = logApiRequest({
+    label: "rate-itinerary",
+    summary: "Sending itinerary rating to Supabase.",
+    payload: {
+      itineraryId: itinerary.id,
+      rating,
+      profileId: userProfile!.profileId,
+    },
+  });
   const { data, error } = await supabase!.functions.invoke("rate-itinerary", {
     body: {
       itinerary,
@@ -41,6 +59,16 @@ export const rateItinerary = async ({
   });
 
   if (error || !data?.itinerary) {
+    logApiError({
+      label: "rate-itinerary",
+      traceId,
+      summary: "Supabase rating failed. Keeping a pending local rating.",
+      error: error ?? new Error("Missing itinerary in rating response."),
+      payload: {
+        itineraryId: itinerary.id,
+        rating,
+      },
+    });
     const nextItinerary = applyLocalRating(itinerary, rating, "pending");
     return {
       itinerary: nextItinerary,
@@ -48,6 +76,12 @@ export const rateItinerary = async ({
       syncStatus: "pending",
     };
   }
+  logApiResponse({
+    label: "rate-itinerary",
+    traceId,
+    summary: "Supabase rating succeeded.",
+    payload: data,
+  });
 
   const nextItinerary: Itinerary = {
     ...itinerary,

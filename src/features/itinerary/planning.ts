@@ -35,14 +35,15 @@ export const estimatedSpendFromPriceLevel = (
 export const deriveBudgetLevel = ({
   totalBudgetKrw,
   partySize,
-}: Pick<TripPreferences, "totalBudgetKrw" | "partySize">): BudgetLevel => {
-  const perPersonBudget = totalBudgetKrw / Math.max(1, partySize);
+  tripDays,
+}: Pick<TripPreferences, "totalBudgetKrw" | "partySize" | "tripDays">): BudgetLevel => {
+  const perPersonPerDayBudget = totalBudgetKrw / Math.max(1, partySize) / Math.max(1, tripDays);
 
-  if (perPersonBudget <= 70000) {
+  if (perPersonPerDayBudget <= 70000) {
     return "value";
   }
 
-  if (perPersonBudget >= 120000) {
+  if (perPersonPerDayBudget >= 120000) {
     return "premium";
   }
 

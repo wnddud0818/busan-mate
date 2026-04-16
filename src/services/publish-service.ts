@@ -1,5 +1,6 @@
 import { hasSupabaseConfig } from "../config/env";
 import { Itinerary, PublishResult, UserProfile } from "../types/domain";
+import { logDebugInfo } from "./debug-service";
 import { syncItineraryRecord, toLocalSharedSnapshot } from "./remote-sync";
 
 export const requiresUpgradeForRemotePublish = ({
@@ -23,6 +24,15 @@ export const publishItinerary = async ({
       remoteEnabled: hasSupabaseConfig,
     })
   ) {
+    logDebugInfo({
+      label: "publish-itinerary",
+      summary: "Publishing was blocked because the user needs to upgrade before remote publish.",
+      payload: {
+        itineraryId: itinerary.id,
+        isAnonymous: userProfile?.isAnonymous ?? true,
+        remoteEnabled: hasSupabaseConfig,
+      },
+    });
     const pendingItinerary: Itinerary = {
       ...itinerary,
       shareStatus: "published",

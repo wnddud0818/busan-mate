@@ -157,6 +157,7 @@ export default function GuideChatPage() {
 
         <View style={styles.inputRow}>
           <TextInput
+            nativeID="guide-question-input"
             value={input}
             onChangeText={setInput}
             style={styles.input}

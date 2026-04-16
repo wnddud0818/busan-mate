@@ -111,6 +111,7 @@ export const TripPreferencesForm = ({
   const derivedBudgetLevel = deriveBudgetLevel({
     totalBudgetKrw,
     partySize,
+    tripDays,
   });
 
   const weatherQuery = useQuery({
@@ -163,6 +164,7 @@ export const TripPreferencesForm = ({
                 <View style={styles.field}>
                   <Text style={styles.label}>{locale === "ko" ? "총 여행 예산" : "Total trip budget"}</Text>
                   <TextInput
+                    nativeID="trip-budget-input"
                     value={value ? String(value) : ""}
                     onChangeText={(text) => onChange(numericValue(text))}
                     style={styles.input}
@@ -191,6 +193,7 @@ export const TripPreferencesForm = ({
                 <View style={styles.field}>
                   <Text style={styles.label}>{locale === "ko" ? "인원수" : "Party size"}</Text>
                   <TextInput
+                    nativeID="trip-party-size-input"
                     value={value ? String(value) : ""}
                     onChangeText={(text) => onChange(Math.max(1, numericValue(text)))}
                     style={styles.input}
@@ -220,6 +223,7 @@ export const TripPreferencesForm = ({
                 render={({ field: { onChange, value } }) => (
                   <>
                     <TextInput
+                      nativeID="trip-date-input"
                       value={value}
                       onChangeText={onChange}
                       style={styles.input}

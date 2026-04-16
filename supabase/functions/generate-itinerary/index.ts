@@ -303,8 +303,8 @@ Deno.serve(async (request) => {
             id: `${place.id}-${order}`,
             order: order + 1,
             date: dayDateLabel,
-            startTime: `${dayDateLabel}T${String(9 + order * 2).padStart(2, "0")}:00:00+09:00`,
-            endTime: `${dayDateLabel}T${String(10 + order * 2).padStart(2, "0")}:00:00+09:00`,
+            startTime: `${dayDateLabel}T${String(Math.min(9 + order * 2, 22)).padStart(2, "0")}:00:00+09:00`,
+            endTime: `${dayDateLabel}T${String(Math.min(10 + order * 2, 23)).padStart(2, "0")}:00:00+09:00`,
             highlight: {
               ko: `${place.district} 핵심 스팟`,
               en: `Top stop in ${place.district}`,

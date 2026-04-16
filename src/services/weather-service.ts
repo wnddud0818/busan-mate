@@ -2,6 +2,7 @@ import { differenceInCalendarDays, format, parseISO, startOfDay } from "date-fns
 
 import { getStartAreaOrDefault, isIsoDate } from "../features/itinerary/planning";
 import { StartAreaId, WeatherRouteSignal, WeatherSnapshot } from "../types/domain";
+import { logApiError, logApiRequest, logApiResponse, logDebugInfo } from "./debug-service";
 
 const FORECAST_ENDPOINT = "https://api.open-meteo.com/v1/forecast";
 const FORECAST_WINDOW_DAYS = 16;
@@ -17,11 +18,11 @@ const unavailableSnapshot = (travelDate: string, reason?: "range" | "fetch"): We
   summary:
     reason === "range"
       ? {
-          ko: "선택한 날짜는 예보 범위를 벗어나 중립 경로로 추천했어요.",
+          ko: "선택한 날짜가 예보 범위를 벗어나 중립 경로로 안내해요.",
           en: "That date is outside the forecast window, so we used a neutral route.",
         }
       : {
-          ko: "날씨 예보를 불러오지 못해 중립 경로로 추천했어요.",
+          ko: "날씨 예보를 불러오지 못해 중립 경로로 안내해요.",
           en: "Forecast unavailable, so we used a neutral route.",
         },
 });
@@ -30,7 +31,7 @@ const summarizeSignal = (signal: WeatherRouteSignal): WeatherSnapshot["summary"]
   switch (signal) {
     case "rainy":
       return {
-        ko: "비 예보로 실내 비중을 높였어요.",
+        ko: "비 예보라 실내 비중을 높였어요.",
         en: "Rain is expected, so we shifted the route indoors.",
       };
     case "clear":
@@ -40,17 +41,17 @@ const summarizeSignal = (signal: WeatherRouteSignal): WeatherSnapshot["summary"]
       };
     case "heat":
       return {
-        ko: "더위 예보를 반영해 실내와 쉬어가기 동선을 강화했어요.",
+        ko: "더운 날씨를 반영해 실내와 휴식 동선을 강화했어요.",
         en: "Hot weather pushes the route toward indoor and recovery stops.",
       };
     case "cold":
       return {
-        ko: "쌀쌀한 날씨를 고려해 실내 비중을 조금 더 높였어요.",
+        ko: "추운 날씨를 고려해 실내 비중을 조금 높였어요.",
         en: "Cool weather nudges the route toward indoor comfort stops.",
       };
     default:
       return {
-        ko: "무난한 날씨라 실내외를 균형 있게 섞었어요.",
+        ko: "무난한 날씨라 실내외 균형을 맞췄어요.",
         en: "Mild weather supports a balanced indoor and outdoor mix.",
       };
   }
@@ -94,12 +95,29 @@ export const fetchWeatherSnapshot = async ({
   travelDate: string;
 }): Promise<WeatherSnapshot> => {
   if (!isIsoDate(travelDate)) {
+    logDebugInfo({
+      label: "weather.forecast",
+      summary: "Skipped weather fetch because the travel date was invalid.",
+      payload: {
+        startAreaId,
+        travelDate,
+      },
+    });
     return unavailableSnapshot(format(new Date(), "yyyy-MM-dd"));
   }
 
   const targetDate = parseISO(travelDate);
   const offsetDays = differenceInCalendarDays(startOfDay(targetDate), startOfDay(new Date()));
   if (offsetDays < 0 || offsetDays >= FORECAST_WINDOW_DAYS) {
+    logDebugInfo({
+      label: "weather.forecast",
+      summary: "Skipped weather fetch because the requested date was outside the forecast window.",
+      payload: {
+        startAreaId,
+        travelDate,
+        offsetDays,
+      },
+    });
     return unavailableSnapshot(travelDate, "range");
   }
 
@@ -111,11 +129,21 @@ export const fetchWeatherSnapshot = async ({
     timezone: "Asia/Seoul",
     forecast_days: String(FORECAST_WINDOW_DAYS),
   });
+  const traceId = logApiRequest({
+    label: "weather.forecast",
+    summary: "Fetching Open-Meteo forecast data.",
+    payload: {
+      endpoint: FORECAST_ENDPOINT,
+      startAreaId,
+      travelDate,
+      params: Object.fromEntries(params.entries()),
+    },
+  });
 
   try {
     const response = await fetch(`${FORECAST_ENDPOINT}?${params.toString()}`);
     if (!response.ok) {
-      throw new Error("Forecast request failed");
+      throw new Error(`Forecast request failed with status ${response.status}`);
     }
 
     const payload = await response.json();
@@ -123,23 +151,29 @@ export const fetchWeatherSnapshot = async ({
     const index = Array.isArray(dates) ? dates.indexOf(travelDate) : -1;
 
     if (index === -1) {
+      logApiResponse({
+        label: "weather.forecast",
+        traceId,
+        summary: "Forecast returned, but the requested date was not present in the payload.",
+        payload: {
+          availableDates: Array.isArray(dates) ? dates.slice(0, 8) : [],
+          travelDate,
+        },
+      });
       return unavailableSnapshot(travelDate, "range");
     }
 
     const weatherCode = Number(payload.daily.weather_code?.[index] ?? 0);
     const temperatureMaxC = Number(payload.daily.temperature_2m_max?.[index] ?? 0);
     const temperatureMinC = Number(payload.daily.temperature_2m_min?.[index] ?? 0);
-    const precipitationProbabilityMax = Number(
-      payload.daily.precipitation_probability_max?.[index] ?? 0
-    );
+    const precipitationProbabilityMax = Number(payload.daily.precipitation_probability_max?.[index] ?? 0);
     const signal = normalizeSignal({
       weatherCode,
       temperatureMaxC,
       temperatureMinC,
       precipitationProbabilityMax,
     });
-
-    return {
+    const snapshot: WeatherSnapshot = {
       status: "live",
       source: "open-meteo",
       date: travelDate,
@@ -150,7 +184,26 @@ export const fetchWeatherSnapshot = async ({
       temperatureMinC,
       precipitationProbabilityMax,
     };
-  } catch {
+
+    logApiResponse({
+      label: "weather.forecast",
+      traceId,
+      summary: `Weather snapshot resolved as ${signal}.`,
+      payload: snapshot,
+    });
+
+    return snapshot;
+  } catch (error) {
+    logApiError({
+      label: "weather.forecast",
+      traceId,
+      summary: "Open-Meteo request failed, so a fallback weather snapshot was used.",
+      error,
+      payload: {
+        startAreaId,
+        travelDate,
+      },
+    });
     return unavailableSnapshot(travelDate, "fetch");
   }
 };
