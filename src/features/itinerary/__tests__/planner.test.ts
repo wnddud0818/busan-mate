@@ -28,6 +28,8 @@ describe("planner", () => {
     const result = validateStructuredItinerary(itinerary);
     expect(result.success).toBe(true);
     expect(itinerary.days).toHaveLength(2);
+    expect(itinerary.planningMeta.debug?.candidatePlaces.length).toBeGreaterThan(0);
+    expect(itinerary.planningMeta.debug?.routeLegs.length).toBeGreaterThan(0);
   });
 
   it("keeps the generated route within the total budget when possible", () => {

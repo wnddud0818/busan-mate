@@ -21,8 +21,11 @@ export interface LocalizedText {
 }
 
 export type SyncStatus = "synced" | "pending" | "failed";
-export type DebugLogKind = "api" | "price";
+export type DebugLogKind = "api" | "price" | "planner";
 export type DebugLogStage = "request" | "response" | "error" | "info";
+export type PlannerEngine = "remote-ai" | "local-fallback" | "indoor-fallback";
+export type PlannerCandidateSelectionStage = "final" | "budget-selected" | "trimmed" | "not-selected";
+export type PlannerPlacesSource = "live" | "seed" | "mixed";
 
 export interface Coordinates {
   latitude: number;
@@ -57,10 +60,56 @@ export interface BudgetSummary {
   summary: LocalizedText;
 }
 
+export interface PlannerCandidateDebug {
+  placeId: string;
+  name: LocalizedText;
+  score: number;
+  estimatedSpendKrw: number;
+  priceLevel: BudgetLevel;
+  indoor: boolean;
+  accessibility: boolean;
+  distanceFromStartKm: number;
+  selected: boolean;
+  routeOrder?: number;
+  selectionStage: PlannerCandidateSelectionStage;
+  scoreBreakdown: Record<string, number>;
+}
+
+export interface PlannerRouteLegDebug {
+  dayNumber: number;
+  order: number;
+  fromPlace?: LocalizedText;
+  toPlace: LocalizedText;
+  durationMinutes?: number;
+  distanceKm?: number;
+  estimatedFareKrw?: number;
+  provider?: "odsay" | "fallback";
+}
+
+export interface PlanningDebug {
+  engine: PlannerEngine;
+  routeResolvedWithoutFallback: boolean;
+  withinBudget: boolean;
+  trimmedToBudget: boolean;
+  selectedStrategy: BudgetSummary["strategy"];
+  targetStopCount: number;
+  minimumStopCount: number;
+  finalStopCount: number;
+  placesSource: PlannerPlacesSource;
+  weatherSource: WeatherSnapshot["source"];
+  liveTransitLegCount: number;
+  fallbackTransitLegCount: number;
+  weatherValues: WeatherSnapshot;
+  candidatePlaces: PlannerCandidateDebug[];
+  routeLegs: PlannerRouteLegDebug[];
+  notes: string[];
+}
+
 export interface PlanningMeta {
   startArea: StartArea;
   weatherSnapshot: WeatherSnapshot;
   budgetSummary: BudgetSummary;
+  debug?: PlanningDebug;
 }
 
 export interface Place {

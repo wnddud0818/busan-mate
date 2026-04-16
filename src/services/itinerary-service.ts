@@ -7,9 +7,25 @@ import {
 } from "../features/itinerary/planning";
 import { buildFallbackItinerary, buildTransitLeg, validateStructuredItinerary } from "../features/itinerary/planner";
 import { supabase } from "../lib/supabase";
-import { AppLocale, GenerateItineraryResponse, Itinerary, Place, TransitLeg, TripPreferences } from "../types/domain";
+import {
+  AppLocale,
+  GenerateItineraryResponse,
+  Itinerary,
+  Place,
+  PlannerEngine,
+  PlannerPlacesSource,
+  TransitLeg,
+  TripPreferences,
+} from "../types/domain";
 import { logApiError, logApiRequest, logApiResponse, logDebugInfo, logPriceSnapshot } from "./debug-service";
 import { fetchWeatherSnapshot } from "./weather-service";
+
+type CandidatePlacesResult = {
+  places: Place[];
+  source: PlannerPlacesSource;
+  liveCount: number;
+  seedCount: number;
+};
 
 const mapTourCategory = (contentTypeId?: string) => {
   switch (contentTypeId) {
@@ -104,7 +120,8 @@ const fetchVisitKoreaPlaces = async (): Promise<Place[]> => {
       summary: `Loaded ${places.length} candidate places from VisitKorea.`,
       payload: {
         count: places.length,
-        sample: places.slice(0, 3),
+        places,
+        raw: payload,
       },
     });
 
@@ -189,7 +206,10 @@ const fetchOdsayTransit = async (
       label: "odsay.searchPubTransPathT",
       traceId,
       summary: `Transit leg resolved in ${leg.durationMinutes} min / ${leg.estimatedFareKrw} KRW.`,
-      payload: leg,
+      payload: {
+        leg,
+        raw: payload,
+      },
     });
 
     return leg;
@@ -256,7 +276,95 @@ const enrichTransitLegs = async (itinerary: Itinerary) => {
   };
 };
 
-const fetchCandidatePlaces = async () => {
+const summarizeTransitProviders = (itinerary: Itinerary) => {
+  const routeLegs = itinerary.days.flatMap((day) =>
+    day.stops
+      .map((stop) => stop.transitFromPrevious)
+      .filter((leg): leg is TransitLeg => Boolean(leg))
+  );
+
+  return {
+    liveTransitLegCount: routeLegs.filter((leg) => leg.provider === "odsay").length,
+    fallbackTransitLegCount: routeLegs.filter((leg) => leg.provider === "fallback").length,
+  };
+};
+
+const extractRouteLegDebug = (itinerary: Itinerary) =>
+  itinerary.days.flatMap((day) =>
+    day.stops.map((stop, index) => ({
+      dayNumber: day.dayNumber,
+      order: stop.order,
+      fromPlace: day.stops[index - 1]?.place.name,
+      toPlace: stop.place.name,
+      durationMinutes: stop.transitFromPrevious?.durationMinutes,
+      distanceKm: stop.transitFromPrevious?.distanceKm,
+      estimatedFareKrw: stop.transitFromPrevious?.estimatedFareKrw,
+      provider: stop.transitFromPrevious?.provider,
+    }))
+  );
+
+const finalizePlanningDebug = ({
+  itinerary,
+  engine,
+  placesSource,
+  notes = [],
+}: {
+  itinerary: Itinerary;
+  engine: PlannerEngine;
+  placesSource: PlannerPlacesSource;
+  notes?: string[];
+}): Itinerary => {
+  const { liveTransitLegCount, fallbackTransitLegCount } = summarizeTransitProviders(itinerary);
+  const totalStops = itinerary.days.reduce((total, day) => total + day.stops.length, 0);
+  const nextNotes = [...new Set([...(itinerary.planningMeta.debug?.notes ?? []), ...notes])];
+  const selectedStrategy = itinerary.planningMeta.debug?.selectedStrategy ?? itinerary.planningMeta.budgetSummary.strategy;
+
+  return {
+    ...itinerary,
+    planningMeta: {
+      ...itinerary.planningMeta,
+      debug: {
+        engine,
+        routeResolvedWithoutFallback:
+          engine === "remote-ai" &&
+          placesSource !== "seed" &&
+          itinerary.planningMeta.weatherSnapshot.source === "open-meteo" &&
+          fallbackTransitLegCount === 0,
+        withinBudget:
+          itinerary.planningMeta.budgetSummary.estimatedTotalKrw <= itinerary.preferences.totalBudgetKrw,
+        trimmedToBudget:
+          itinerary.planningMeta.debug?.trimmedToBudget ??
+          (itinerary.planningMeta.budgetSummary.strategy === "minimum"),
+        selectedStrategy,
+        targetStopCount:
+          itinerary.planningMeta.debug?.targetStopCount ?? totalStops,
+        minimumStopCount:
+          itinerary.planningMeta.debug?.minimumStopCount ??
+          Math.min(totalStops, Math.max(itinerary.preferences.tripDays, Math.min(3, totalStops))),
+        finalStopCount: itinerary.planningMeta.debug?.finalStopCount ?? totalStops,
+        placesSource,
+        weatherSource: itinerary.planningMeta.weatherSnapshot.source,
+        liveTransitLegCount,
+        fallbackTransitLegCount,
+        weatherValues: itinerary.planningMeta.debug?.weatherValues ?? itinerary.planningMeta.weatherSnapshot,
+        candidatePlaces: itinerary.planningMeta.debug?.candidatePlaces ?? [],
+        routeLegs: itinerary.planningMeta.debug?.routeLegs ?? extractRouteLegDebug(itinerary),
+        notes: nextNotes,
+      },
+    },
+  };
+};
+
+const logPlannerSnapshot = (itinerary: Itinerary, summary: string) => {
+  logDebugInfo({
+    kind: "planner",
+    label: "generate-itinerary.planner",
+    summary,
+    payload: itinerary.planningMeta.debug,
+  });
+};
+
+const fetchCandidatePlaces = async (): Promise<CandidatePlacesResult> => {
   if (!hasTourApiKey) {
     logDebugInfo({
       label: "visit-korea.areaBasedList2",
@@ -265,7 +373,12 @@ const fetchCandidatePlaces = async () => {
         source: "seed",
       },
     });
-    return seedPlaces;
+    return {
+      places: seedPlaces,
+      source: "seed",
+      liveCount: 0,
+      seedCount: seedPlaces.length,
+    };
   }
 
   const livePlaces = await fetchVisitKoreaPlaces().catch(() => []);
@@ -279,7 +392,21 @@ const fetchCandidatePlaces = async () => {
     });
   }
 
-  return livePlaces.length > 0 ? [...livePlaces, ...seedPlaces] : seedPlaces;
+  if (livePlaces.length > 0) {
+    return {
+      places: [...livePlaces, ...seedPlaces],
+      source: "mixed",
+      liveCount: livePlaces.length,
+      seedCount: seedPlaces.length,
+    };
+  }
+
+  return {
+    places: seedPlaces,
+    source: "seed",
+    liveCount: 0,
+    seedCount: seedPlaces.length,
+  };
 };
 
 const collectPlanningWarnings = (itinerary: Itinerary) => {
@@ -302,16 +429,22 @@ export const generateItinerary = async (
 ): Promise<GenerateItineraryResponse> => {
   const normalizedPreferences = normalizeTripPreferences(preferences);
   const warnings: string[] = [];
-  const [places, weatherSnapshot] = await Promise.all([
+  const [candidatePlaces, weatherSnapshot] = await Promise.all([
     fetchCandidatePlaces().catch(() => {
       warnings.push("Tour API unavailable, using seeded Busan places.");
-      return seedPlaces;
+      return {
+        places: seedPlaces,
+        source: "seed" as const,
+        liveCount: 0,
+        seedCount: seedPlaces.length,
+      };
     }),
     fetchWeatherSnapshot({
       startAreaId: normalizedPreferences.startAreaId,
       travelDate: normalizedPreferences.travelDate,
     }),
   ]);
+  const places = candidatePlaces.places;
 
   if (hasSupabaseConfig && supabase) {
     const traceId = logApiRequest({
@@ -337,10 +470,17 @@ export const generateItinerary = async (
     if (!error && data) {
       const candidate = validateStructuredItinerary(data.itinerary ?? data);
       if (candidate.success) {
-        const remoteItinerary = await enrichTransitLegs({
-          ...candidate.data,
-          source: "ai",
-          syncStatus: "synced",
+        const remoteItinerary = finalizePlanningDebug({
+          itinerary: await enrichTransitLegs({
+            ...candidate.data,
+            source: "ai",
+            syncStatus: "synced",
+          }),
+          engine: "remote-ai",
+          placesSource: candidatePlaces.source,
+          notes: [
+            `Candidate places: live ${candidatePlaces.liveCount}, seed ${candidatePlaces.seedCount}`,
+          ],
         });
 
         logApiResponse({
@@ -358,6 +498,7 @@ export const generateItinerary = async (
           label: "generate-itinerary.price",
           itinerary: remoteItinerary,
         });
+        logPlannerSnapshot(remoteItinerary, "Planner debug snapshot for the remote AI itinerary.");
 
         return {
           itinerary: remoteItinerary,
@@ -401,32 +542,40 @@ export const generateItinerary = async (
   const fallback = await enrichTransitLegs(
     buildFallbackItinerary(normalizedPreferences, places, {
       startArea: getStartAreaOrDefault(normalizedPreferences.startAreaId),
+      engine: "local-fallback",
       weatherSnapshot,
     })
   );
+  const debugReadyFallback = finalizePlanningDebug({
+    itinerary: fallback,
+    engine: fallback.planningMeta.debug?.engine ?? "local-fallback",
+    placesSource: candidatePlaces.source,
+    notes: [`Candidate places: live ${candidatePlaces.liveCount}, seed ${candidatePlaces.seedCount}`],
+  });
 
   logDebugInfo({
     label: "generate-itinerary",
     summary: "Using local fallback itinerary planner.",
     payload: {
       warnings,
-      itineraryId: fallback.id,
-      days: fallback.days.length,
+      itineraryId: debugReadyFallback.id,
+      days: debugReadyFallback.days.length,
     },
   });
   logPriceSnapshot({
     label: "generate-itinerary.price",
-    itinerary: fallback,
+    itinerary: debugReadyFallback,
     summary: "Price snapshot for the fallback itinerary.",
   });
+  logPlannerSnapshot(debugReadyFallback, "Planner debug snapshot for the fallback itinerary.");
 
   return {
-    itinerary: fallback,
+    itinerary: debugReadyFallback,
     usedFallback: true,
     warnings: [
       ...new Set([
         ...warnings,
-        ...collectPlanningWarnings(fallback),
+        ...collectPlanningWarnings(debugReadyFallback),
         "Fallback planner used because remote AI was unavailable.",
       ]),
     ],

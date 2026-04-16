@@ -118,10 +118,56 @@ const budgetSummarySchema = z.object({
   summary: localizedTextSchema,
 });
 
+const plannerCandidateDebugSchema = z.object({
+  placeId: z.string().min(1),
+  name: localizedTextSchema,
+  score: z.number(),
+  estimatedSpendKrw: z.number().int().nonnegative(),
+  priceLevel: z.enum(["value", "balanced", "premium"]),
+  indoor: z.boolean(),
+  accessibility: z.boolean(),
+  distanceFromStartKm: z.number().nonnegative(),
+  selected: z.boolean(),
+  routeOrder: z.number().int().positive().optional(),
+  selectionStage: z.enum(["final", "budget-selected", "trimmed", "not-selected"]),
+  scoreBreakdown: z.record(z.string(), z.number()),
+});
+
+const plannerRouteLegDebugSchema = z.object({
+  dayNumber: z.number().int().positive(),
+  order: z.number().int().positive(),
+  fromPlace: localizedTextSchema.optional(),
+  toPlace: localizedTextSchema,
+  durationMinutes: z.number().nonnegative().optional(),
+  distanceKm: z.number().nonnegative().optional(),
+  estimatedFareKrw: z.number().int().nonnegative().optional(),
+  provider: z.enum(["odsay", "fallback"]).optional(),
+});
+
+const planningDebugSchema = z.object({
+  engine: z.enum(["remote-ai", "local-fallback", "indoor-fallback"]),
+  routeResolvedWithoutFallback: z.boolean(),
+  withinBudget: z.boolean(),
+  trimmedToBudget: z.boolean(),
+  selectedStrategy: z.enum(["within", "minimum"]),
+  targetStopCount: z.number().int().nonnegative(),
+  minimumStopCount: z.number().int().nonnegative(),
+  finalStopCount: z.number().int().nonnegative(),
+  placesSource: z.enum(["live", "seed", "mixed"]),
+  weatherSource: z.enum(["open-meteo", "fallback"]),
+  liveTransitLegCount: z.number().int().nonnegative(),
+  fallbackTransitLegCount: z.number().int().nonnegative(),
+  weatherValues: weatherSnapshotSchema,
+  candidatePlaces: z.array(plannerCandidateDebugSchema),
+  routeLegs: z.array(plannerRouteLegDebugSchema),
+  notes: z.array(z.string()),
+});
+
 const planningMetaSchema = z.object({
   startArea: startAreaSchema,
   weatherSnapshot: weatherSnapshotSchema,
   budgetSummary: budgetSummarySchema,
+  debug: planningDebugSchema.optional(),
 });
 
 export const itinerarySchema = z.object({

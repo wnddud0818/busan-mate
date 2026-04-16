@@ -34,6 +34,8 @@ describe("service fallbacks", () => {
     expect(result.usedFallback).toBe(true);
     expect(result.itinerary.days.length).toBe(1);
     expect(result.warnings.join(" ")).toContain("중립");
+    expect(result.itinerary.planningMeta.debug?.engine).toBe("local-fallback");
+    expect(result.itinerary.planningMeta.debug?.candidatePlaces.length).toBeGreaterThan(0);
   });
 
   it("requires upgrade for anonymous remote publishing", () => {

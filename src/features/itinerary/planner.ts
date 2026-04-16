@@ -10,6 +10,10 @@ import {
   ItineraryDay,
   ItineraryStop,
   Place,
+  PlanningDebug,
+  PlannerCandidateDebug,
+  PlannerEngine,
+  PlannerRouteLegDebug,
   StartArea,
   TransitLeg,
   TripPreferences,
@@ -21,7 +25,11 @@ import { tText } from "../../utils/localized";
 import { buildBudgetSummary, getStartAreaOrDefault, makeBudgetLabel, normalizeTripPreferences } from "./planning";
 import { itinerarySchema } from "./schema";
 
-type ScoredPlace = Place & { score: number };
+type ScoredPlace = Place & {
+  score: number;
+  scoreBreakdown: Record<string, number>;
+  distanceFromStartKm: number;
+};
 
 const neutralWeatherSnapshot = (travelDate: string): WeatherSnapshot => ({
   status: "unavailable",
@@ -83,6 +91,9 @@ const distanceScore = (place: Place, startArea: StartArea) => {
   return 1;
 };
 
+const distanceFromStartKm = (place: Place, startArea: StartArea) =>
+  Number((getDistance(place.coordinates, startArea.coordinates) / 1000).toFixed(1));
+
 export const scorePlaces = (
   preferences: TripPreferences,
   places = seedPlaces,
@@ -120,19 +131,26 @@ export const scorePlaces = (
               ? 10
               : 4
             : 6;
+      const weatherScoreValue = weatherScore(place, weatherSnapshot);
+      const distanceScoreValue = distanceScore(place, startArea);
+      const popularityScore = Number((place.popularity * 0.35).toFixed(2));
+      const scoreBreakdown = {
+        interest: interestScore,
+        accessibility: accessibilityScore,
+        fallback: fallbackScore,
+        mobility: mobilityScore,
+        budget: budgetScore,
+        companion: companionScore,
+        weather: weatherScoreValue,
+        distance: distanceScoreValue,
+        popularity: popularityScore,
+      };
 
       return {
         ...place,
-        score:
-          interestScore +
-          accessibilityScore +
-          fallbackScore +
-          mobilityScore +
-          budgetScore +
-          companionScore +
-          weatherScore(place, weatherSnapshot) +
-          distanceScore(place, startArea) +
-          place.popularity * 0.35,
+        distanceFromStartKm: distanceFromStartKm(place, startArea),
+        scoreBreakdown,
+        score: Object.values(scoreBreakdown).reduce((total, value) => total + value, 0),
       };
     })
     .sort((left, right) => right.score - left.score);
@@ -395,6 +413,97 @@ const sumDayCost = (day: ItineraryDay, partySize: number) =>
     0
   );
 
+const buildRouteLegDebug = (days: ItineraryDay[]): PlannerRouteLegDebug[] =>
+  days.flatMap((day) =>
+    day.stops.map((stop, index) => {
+      const previous = day.stops[index - 1];
+      return {
+        dayNumber: day.dayNumber,
+        order: stop.order,
+        fromPlace: previous?.place.name,
+        toPlace: stop.place.name,
+        durationMinutes: stop.transitFromPrevious?.durationMinutes,
+        distanceKm: stop.transitFromPrevious?.distanceKm,
+        estimatedFareKrw: stop.transitFromPrevious?.estimatedFareKrw,
+        provider: stop.transitFromPrevious?.provider,
+      };
+    })
+  );
+
+const buildPlanningDebug = ({
+  engine,
+  preferences,
+  weatherSnapshot,
+  scored,
+  budgetSelection,
+  selectedStrategy,
+  finalPlaces,
+  days,
+  estimatedTotalKrw,
+}: {
+  engine: PlannerEngine;
+  preferences: TripPreferences;
+  weatherSnapshot: WeatherSnapshot;
+  scored: ScoredPlace[];
+  budgetSelection: {
+    places: ScoredPlace[];
+    strategy: "within" | "minimum";
+  };
+  selectedStrategy: "within" | "minimum";
+  finalPlaces: ScoredPlace[];
+  days: ItineraryDay[];
+  estimatedTotalKrw: number;
+}): PlanningDebug => {
+  const budgetSelectedIds = new Set(budgetSelection.places.map((place) => place.id));
+  const finalIds = new Set(finalPlaces.map((place) => place.id));
+  const routeOrder = new Map(finalPlaces.map((place, index) => [place.id, index + 1]));
+  const routeLegs = buildRouteLegDebug(days);
+  const liveTransitLegCount = routeLegs.filter((leg) => leg.provider === "odsay").length;
+  const fallbackTransitLegCount = routeLegs.filter((leg) => leg.provider === "fallback").length;
+  const candidatePlaces: PlannerCandidateDebug[] = scored.map((place) => ({
+    placeId: place.id,
+    name: place.name,
+    score: Number(place.score.toFixed(2)),
+    estimatedSpendKrw: place.estimatedSpendKrw,
+    priceLevel: place.priceLevel,
+    indoor: place.indoor,
+    accessibility: place.accessibility,
+    distanceFromStartKm: place.distanceFromStartKm,
+    selected: finalIds.has(place.id),
+    routeOrder: routeOrder.get(place.id),
+    selectionStage: finalIds.has(place.id)
+      ? "final"
+      : budgetSelectedIds.has(place.id)
+        ? "trimmed"
+        : "not-selected",
+    scoreBreakdown: place.scoreBreakdown,
+  }));
+  const trimmedCount = candidatePlaces.filter((candidate) => candidate.selectionStage === "trimmed").length;
+
+  return {
+    engine,
+    routeResolvedWithoutFallback: false,
+    withinBudget: estimatedTotalKrw <= preferences.totalBudgetKrw,
+    trimmedToBudget: trimmedCount > 0,
+    selectedStrategy,
+    targetStopCount: targetStopCount(preferences.tripDays, scored.length),
+    minimumStopCount: minimumStopCount(preferences.tripDays, scored.length),
+    finalStopCount: finalPlaces.length,
+    placesSource: "seed",
+    weatherSource: weatherSnapshot.source,
+    liveTransitLegCount,
+    fallbackTransitLegCount,
+    weatherValues: weatherSnapshot,
+    candidatePlaces,
+    routeLegs,
+    notes: [
+      `${engine} planner debug snapshot`,
+      `Selection strategy ${selectedStrategy}`,
+      trimmedCount > 0 ? `${trimmedCount} budget-selected candidates were trimmed.` : "No route trimming was required.",
+    ],
+  };
+};
+
 const buildPlanningMeta = ({
   days,
   preferences,
@@ -481,12 +590,14 @@ export const buildFallbackItinerary = (
   planningInput?: {
     weatherSnapshot?: WeatherSnapshot;
     startArea?: StartArea;
+    engine?: PlannerEngine;
   }
 ): Itinerary => {
   const normalizedPreferences = normalizeTripPreferences(preferences);
   const locale = normalizedPreferences.locale;
   const startArea = planningInput?.startArea ?? getStartAreaOrDefault(normalizedPreferences.startAreaId);
   const weatherSnapshot = planningInput?.weatherSnapshot ?? neutralWeatherSnapshot(normalizedPreferences.travelDate);
+  const engine = planningInput?.engine ?? "local-fallback";
   const scored = scorePlaces(normalizedPreferences, candidatePlaces, { weatherSnapshot, startArea });
   const budgetSelection = selectPlacesWithinBudget(scored, normalizedPreferences);
   const orderedSelection = orderPlacesForRoute(budgetSelection.places, startArea);
@@ -510,6 +621,17 @@ export const buildFallbackItinerary = (
     startArea,
     weatherSnapshot,
     strategy: finalStrategy,
+  });
+  const planningDebug = buildPlanningDebug({
+    engine,
+    preferences: normalizedPreferences,
+    weatherSnapshot,
+    scored,
+    budgetSelection,
+    selectedStrategy: finalStrategy,
+    finalPlaces: trimmedSelection.places,
+    days,
+    estimatedTotalKrw: planningMeta.budgetSummary.estimatedTotalKrw,
   });
   const titleAnchor = trimmedSelection.places[0]?.name ?? startArea.name;
 
@@ -539,7 +661,10 @@ export const buildFallbackItinerary = (
     days,
     ratingAverage: 4.6,
     estimatedBudgetLabel: makeBudgetLabel(normalizedPreferences.budgetLevel),
-    planningMeta,
+    planningMeta: {
+      ...planningMeta,
+      debug: planningDebug,
+    },
   };
 };
 
@@ -556,6 +681,7 @@ export const buildIndoorFallback = (
   return {
     ...buildFallbackItinerary(preferences, indoorPlaces, {
       startArea: itinerary.planningMeta?.startArea ?? startAreas[0],
+      engine: "indoor-fallback",
       weatherSnapshot: {
         status: "live",
         source: "fallback",

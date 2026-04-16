@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useAppStore } from "../../stores/app-store";
@@ -21,9 +21,7 @@ const formatTimestamp = (value: string) => {
 export const DebugPanel = () => {
   const debugLogs = useAppStore((state) => state.debugLogs);
   const clearDebugLogs = useAppStore((state) => state.actions.clearDebugLogs);
-  const [open, setOpen] = useState(false);
-
-  const visibleLogs = useMemo(() => debugLogs.slice(0, 12), [debugLogs]);
+  const [open, setOpen] = useState(debugLogs.length > 0);
 
   return (
     <View style={styles.wrapper}>
@@ -36,7 +34,9 @@ export const DebugPanel = () => {
           <View style={styles.panelHeader}>
             <View style={styles.panelTitleWrap}>
               <Text style={styles.panelTitle}>Live debug</Text>
-              <Text style={styles.panelHint}>Recent API request/response logs and price snapshots.</Text>
+              <Text style={styles.panelHint}>
+                Full API payloads, planner traces, and price snapshots captured on this device.
+              </Text>
             </View>
             <Pressable onPress={clearDebugLogs} style={styles.clearButton}>
               <Text style={styles.clearButtonText}>Clear</Text>
@@ -44,10 +44,10 @@ export const DebugPanel = () => {
           </View>
 
           <ScrollView style={styles.logs} contentContainerStyle={styles.logsContent} nestedScrollEnabled>
-            {visibleLogs.length === 0 ? (
+            {debugLogs.length === 0 ? (
               <Text style={styles.emptyText}>No debug events yet.</Text>
             ) : (
-              visibleLogs.map((log) => (
+              debugLogs.map((log) => (
                 <View
                   key={log.id}
                   style={[
@@ -56,7 +56,9 @@ export const DebugPanel = () => {
                       ? styles.errorCard
                       : log.kind === "price"
                         ? styles.priceCard
-                        : undefined,
+                        : log.kind === "planner"
+                          ? styles.plannerCard
+                          : undefined,
                   ]}
                 >
                   <View style={styles.logMetaRow}>
@@ -143,7 +145,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   logs: {
-    maxHeight: 320,
+    maxHeight: 520,
   },
   logsContent: {
     gap: spacing.sm,
@@ -165,6 +167,9 @@ const styles = StyleSheet.create({
   },
   priceCard: {
     borderColor: "rgba(95,209,194,0.55)",
+  },
+  plannerCard: {
+    borderColor: "rgba(255,186,0,0.55)",
   },
   logMetaRow: {
     flexDirection: "row",

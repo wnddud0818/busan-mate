@@ -64,6 +64,47 @@ type Preferences = {
   indoorFallback: boolean;
 };
 
+type PlannerDebug = {
+  engine: "remote-ai";
+  routeResolvedWithoutFallback: boolean;
+  withinBudget: boolean;
+  trimmedToBudget: boolean;
+  selectedStrategy: "within" | "minimum";
+  targetStopCount: number;
+  minimumStopCount: number;
+  finalStopCount: number;
+  placesSource: "live" | "seed" | "mixed";
+  weatherSource: WeatherSnapshot["source"];
+  liveTransitLegCount: number;
+  fallbackTransitLegCount: number;
+  weatherValues: WeatherSnapshot;
+  candidatePlaces: Array<{
+    placeId: string;
+    name: LocalizedText;
+    score: number;
+    estimatedSpendKrw: number;
+    priceLevel: Place["priceLevel"];
+    indoor: boolean;
+    accessibility: boolean;
+    distanceFromStartKm: number;
+    selected: boolean;
+    routeOrder?: number;
+    selectionStage: "final" | "budget-selected" | "trimmed" | "not-selected";
+    scoreBreakdown: Record<string, number>;
+  }>;
+  routeLegs: Array<{
+    dayNumber: number;
+    order: number;
+    fromPlace?: LocalizedText;
+    toPlace: LocalizedText;
+    durationMinutes?: number;
+    distanceKm?: number;
+    estimatedFareKrw?: number;
+    provider?: "odsay" | "fallback";
+  }>;
+  notes: string[];
+};
+
 const makeBudgetLabel = (budgetLevel: Preferences["budgetLevel"]) =>
   budgetLevel === "value"
     ? { ko: "1인 4만~7만 원", en: "KRW 40k-70k per person" }
@@ -188,17 +229,41 @@ const weatherScore = (place: Place, weatherSnapshot: WeatherSnapshot) => {
   }
 };
 
-const scorePlace = (place: Place, preferences: Preferences, weatherSnapshot: WeatherSnapshot, startArea: StartArea) => {
-  const interestScore = place.categories.reduce(
+const distanceFromStartKm = (place: Place, startArea: StartArea) =>
+  Number(estimateDistanceKm(startArea.coordinates, place.coordinates).toFixed(1));
+
+const buildScoreBreakdown = (
+  place: Place,
+  preferences: Preferences,
+  weatherSnapshot: WeatherSnapshot,
+  startArea: StartArea
+) => {
+  const interest = place.categories.reduce(
     (total, category) => total + (preferences.interests.includes(category) ? 16 : 0),
     0
   );
-  const budgetScore = place.priceLevel === preferences.budgetLevel ? 10 : 4;
-  const accessibilityScore = preferences.accessibilityNeeds ? (place.accessibility ? 18 : -16) : 6;
+  const budget = place.priceLevel === preferences.budgetLevel ? 10 : 4;
+  const accessibility = preferences.accessibilityNeeds ? (place.accessibility ? 18 : -16) : 6;
+  const weather = weatherScore(place, weatherSnapshot);
   const distanceKm = estimateDistanceKm(startArea.coordinates, place.coordinates);
-  const distanceScore = distanceKm < 3 ? 10 : distanceKm < 8 ? 5 : 1;
+  const distance = distanceKm < 3 ? 10 : distanceKm < 8 ? 5 : 1;
+  const popularity = Number((place.popularity * 0.3).toFixed(2));
 
-  return interestScore + budgetScore + accessibilityScore + weatherScore(place, weatherSnapshot) + distanceScore + place.popularity * 0.3;
+  return {
+    interest,
+    budget,
+    accessibility,
+    weather,
+    distance,
+    popularity,
+  };
+};
+
+const scorePlace = (place: Place, preferences: Preferences, weatherSnapshot: WeatherSnapshot, startArea: StartArea) => {
+  return Object.values(buildScoreBreakdown(place, preferences, weatherSnapshot, startArea)).reduce(
+    (total, value) => total + value,
+    0
+  );
 };
 
 const minimumStopCount = (tripDays: number, totalPlaces: number) =>
@@ -261,6 +326,96 @@ const chunkByDays = (places: Place[], tripDays: number) => {
   }
 
   return buckets;
+};
+
+const buildPlanningDebug = ({
+  preferences,
+  places,
+  selectedPlaces,
+  days,
+  startArea,
+  weatherSnapshot,
+  estimatedTotalKrw,
+  strategy,
+}: {
+  preferences: Preferences;
+  places: Place[];
+  selectedPlaces: Place[];
+  days: Array<{
+    dayNumber: number;
+    stops: Array<{
+      order: number;
+      place: Place;
+      transitFromPrevious?: {
+        durationMinutes: number;
+        distanceKm: number;
+        estimatedFareKrw: number;
+        provider: "odsay" | "fallback";
+      };
+    }>;
+  }>;
+  startArea: StartArea;
+  weatherSnapshot: WeatherSnapshot;
+  estimatedTotalKrw: number;
+  strategy: "within" | "minimum";
+}): PlannerDebug => {
+  const selectedIds = new Set(selectedPlaces.map((place) => place.id));
+  const routeOrder = new Map(selectedPlaces.map((place, index) => [place.id, index + 1]));
+  const routeLegs = days.flatMap((day) =>
+    day.stops.map((stop, index) => ({
+      dayNumber: day.dayNumber,
+      order: stop.order,
+      fromPlace: day.stops[index - 1]?.place.name,
+      toPlace: stop.place.name,
+      durationMinutes: stop.transitFromPrevious?.durationMinutes,
+      distanceKm: stop.transitFromPrevious?.distanceKm,
+      estimatedFareKrw: stop.transitFromPrevious?.estimatedFareKrw,
+      provider: stop.transitFromPrevious?.provider,
+    }))
+  );
+  const fallbackTransitLegCount = routeLegs.filter((leg) => leg.provider === "fallback").length;
+
+  return {
+    engine: "remote-ai",
+    routeResolvedWithoutFallback: false,
+    withinBudget: estimatedTotalKrw <= preferences.totalBudgetKrw,
+    trimmedToBudget: false,
+    selectedStrategy: strategy,
+    targetStopCount: Math.min(places.length, Math.max(4, preferences.tripDays * 3)),
+    minimumStopCount: minimumStopCount(preferences.tripDays, places.length),
+    finalStopCount: selectedPlaces.length,
+    placesSource: "mixed",
+    weatherSource: weatherSnapshot.source,
+    liveTransitLegCount: 0,
+    fallbackTransitLegCount,
+    weatherValues: weatherSnapshot,
+    candidatePlaces: [...places]
+      .sort(
+        (left, right) =>
+          scorePlace(right, preferences, weatherSnapshot, startArea) -
+          scorePlace(left, preferences, weatherSnapshot, startArea)
+      )
+      .map((place) => ({
+        placeId: place.id,
+        name: place.name,
+        score: Number(scorePlace(place, preferences, weatherSnapshot, startArea).toFixed(2)),
+        estimatedSpendKrw: place.estimatedSpendKrw,
+        priceLevel: place.priceLevel,
+        indoor: place.indoor,
+        accessibility: place.accessibility,
+        distanceFromStartKm: distanceFromStartKm(place, startArea),
+        selected: selectedIds.has(place.id),
+        routeOrder: routeOrder.get(place.id),
+        selectionStage: selectedIds.has(place.id) ? "final" : "not-selected",
+        scoreBreakdown: buildScoreBreakdown(place, preferences, weatherSnapshot, startArea),
+      })),
+    routeLegs,
+    notes: [
+      "remote-ai planner debug snapshot",
+      `Selection strategy ${strategy}`,
+      "Fallback-free status is resolved on the client after live transit enrichment.",
+    ],
+  };
 };
 
 Deno.serve(async (request) => {
@@ -339,6 +494,18 @@ Deno.serve(async (request) => {
       0
     )
   );
+  const finalStrategy =
+    selected.strategy === "minimum" || estimatedTotalKrw > preferences.totalBudgetKrw ? "minimum" : "within";
+  const planningDebug = buildPlanningDebug({
+    preferences,
+    places,
+    selectedPlaces: selected.places,
+    days,
+    startArea,
+    weatherSnapshot,
+    estimatedTotalKrw,
+    strategy: finalStrategy,
+  });
 
   return json({
     itinerary: {
@@ -375,9 +542,9 @@ Deno.serve(async (request) => {
           estimatedTotalKrw,
           estimatedPerPersonKrw: Math.round(estimatedTotalKrw / Math.max(1, preferences.partySize)),
           remainingBudgetKrw: preferences.totalBudgetKrw - estimatedTotalKrw,
-          strategy: selected.strategy === "minimum" || estimatedTotalKrw > preferences.totalBudgetKrw ? "minimum" : "within",
+          strategy: finalStrategy,
           summary:
-            selected.strategy === "minimum" || estimatedTotalKrw > preferences.totalBudgetKrw
+            finalStrategy === "minimum"
               ? {
                   ko: `예산 ${formatKrwCompact(preferences.totalBudgetKrw, "ko")} 기준 최저 예산 경로예요.`,
                   en: `Built the lowest-cost route for ${formatKrwCompact(preferences.totalBudgetKrw, "en")}.`,
@@ -390,6 +557,7 @@ Deno.serve(async (request) => {
                   )}`,
                 },
         },
+        debug: planningDebug,
       },
     },
   });

@@ -189,7 +189,10 @@ export const fetchWeatherSnapshot = async ({
       label: "weather.forecast",
       traceId,
       summary: `Weather snapshot resolved as ${signal}.`,
-      payload: snapshot,
+      payload: {
+        snapshot,
+        raw: payload,
+      },
     });
 
     return snapshot;

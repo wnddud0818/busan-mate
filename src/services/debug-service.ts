@@ -4,9 +4,9 @@ import { createId } from "../utils/id";
 import { useAppStore } from "../stores/app-store";
 
 const MAX_DEPTH = 4;
-const MAX_ARRAY_ITEMS = 8;
-const MAX_OBJECT_KEYS = 16;
-const MAX_STRING_LENGTH = 600;
+const MAX_ARRAY_ITEMS = 24;
+const MAX_OBJECT_KEYS = 32;
+const MAX_STRING_LENGTH = 1200;
 
 const truncateText = (value: string, limit = MAX_STRING_LENGTH) =>
   value.length <= limit ? value : `${value.slice(0, limit)}...`;
